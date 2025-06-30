@@ -1,0 +1,90 @@
+services:
+  defi-guard-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      defi-guard-threat-intel:
+        condition: service_healthy
+      defi-guard-stablecoin-monitor:
+        condition: service_healthy
+    environment:
+      - REACT_APP_THREAT_INTEL_API_URL=http://localhost:8000
+      - REACT_APP_STABLECOIN_MONITOR_API_URL=http://localhost:8001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - defi-guard-network
+
+  defi-guard-threat-intel:
+    image: python:3.11-slim
+    command: >
+      sh -c "
+        apt-get update && 
+        apt-get install -y curl git && 
+        git clone https://github.com/NeerajHazarika/defi-guard-threat-intel-osint.git /app &&
+        cd /app && 
+        mkdir -p /app/data &&
+        pip install -r requirements.txt && 
+        python -c 'from app.database.database import create_tables; create_tables()' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
+      "
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:////app/data/threat_intel.db
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DEBUG=false
+      - SCRAPER_DELAY=2
+      - MAX_CONCURRENT_REQUESTS=5
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - defi-guard-network
+
+  defi-guard-stablecoin-monitor:
+    image: python:3.9-slim
+    command: >
+      sh -c "
+        apt-get update && 
+        apt-get install -y curl git && 
+        git clone https://github.com/NeerajHazarika/defi-guard-stable-coin-monitor.git /app &&
+        cd /app && 
+        mkdir -p /app/data &&
+        pip install -r requirements.txt && 
+        python init_db.py &&
+        uvicorn services.stablecoin_monitor.main:app --host 0.0.0.0 --port 8000
+      "
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=sqlite:////app/data/stablecoin_monitor.db
+      - PEG_CHECK_INTERVAL=60
+      - ALERT_THRESHOLD_CRITICAL=0.05
+      - ALERT_THRESHOLD_HIGH=0.02
+      - ALERT_THRESHOLD_MEDIUM=0.01
+      - COINGECKO_RATE_LIMIT=30
+      - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
+      - PYTHONPATH=/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - defi-guard-network
+
+networks:
+  defi-guard-network:
+    driver: bridge

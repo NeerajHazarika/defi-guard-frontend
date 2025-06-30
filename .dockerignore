@@ -1,0 +1,96 @@
+# Ignore build artifacts
+dist/
+build/
+.next/
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Temporary folders
+tmp/
+temp/
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Storybook build outputs
+.storybook-static/
+
+# Local development files
+.env.development
+.env.staging
+
+# Docker
+.dockerignore
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Documentation and markdown files (except README.md)
+*.md
+!README.md
+
+# Test files
+test-*.js
+*.test.js
+*.spec.js
+__tests__/
+
+# Debug files
+debug-*.html
+
+# Development Docker files
+Dockerfile.dev
+docker-compose.dev.yml
+
+# Build scripts (not needed in container)
+docker-build.sh
+
+# Development tools config
+eslint.config.js
+.eslintrc*
+.prettierrc*
+.editorconfig
