@@ -20,6 +20,9 @@ DeFi Guard Frontend is a professional security dashboard providing real-time mon
 - **Attack Surface Monitoring**: Protocol vulnerability tracking
 
 ### 🔍 **Compliance Tools**
+- **Address Screening**: Check Bitcoin addresses against sanctions lists and risk assessments
+- **Transaction Screening**: Analyze Bitcoin transactions with multi-hop analysis
+- **Bulk Screening**: Process multiple addresses and transactions simultaneously
 - **OFAC Compliance**: Sanctions screening and address monitoring
 - **DeFi Risk Assessment**: Protocol security analysis
 - **Fraud Intelligence**: Scam detection and user risk profiling
@@ -75,11 +78,26 @@ npm run preview
 
 ### Docker Deployment
 
+**Using the Management Script (Recommended)**
+```bash
+# Interactive setup and management
+./defi-guard-manager.sh
+
+# Follow the menu to:
+# 1) Start all services
+# 2) Check service health
+# 3) Show service status
+# 4) Show recent logs
+# 5) Stop all services
+# 6) Cleanup (stop + remove data)
+```
+
+**Manual Docker Compose**
 ```bash
 # Build and run with Docker Compose
 docker-compose up --build
 
-# Access dashboard at http://localhost:3000
+# Access dashboard at http://localhost:3002
 ```
 
 ## 🏗️ Project Structure
@@ -390,3 +408,27 @@ The frontend is integrated with a live backend service for real-time attack surf
 1. Start the backend service on `http://localhost:8000/`
 2. Launch the frontend dashboard
 3. Navigate to "Attack Surface Monitoring" for live backend data
+
+## 📚 Documentation
+
+For comprehensive documentation and development guides, see the [docs](./docs/) directory:
+
+### 🎯 Quick References
+- **[Quick Start Guide](./docs/QUICK_START.md)** - Get running in 1 minute
+- **[Architecture Overview](./docs/ARCHITECTURE.md)** - System design and service interactions
+- **[API Services](./docs/API_SERVICES.md)** - Complete API integration reference
+- **[Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+### 🔧 Development Documentation
+- **[Frontend Components](./docs/FRONTEND_COMPONENTS.md)** - React components and UI patterns
+- **[Data Models](./docs/DATA_MODELS.md)** - TypeScript interfaces and data structures
+- **[Configuration](./docs/CONFIGURATION.md)** - Environment variables and settings
+
+### 🛡️ Service Documentation
+- **[Sanction Detector](./docs/SANCTION_DETECTOR.md)** - Address/transaction screening service
+- **[Threat Intelligence](./docs/THREAT_INTELLIGENCE.md)** - OSINT threat monitoring service
+- **[Stablecoin Monitor](./docs/STABLECOIN_MONITOR.md)** - Depeg detection and monitoring
+- **[Transaction Screening Integration](./docs/TRANSACTION_SCREENING_INTEGRATION.md)** - Latest TXID screening features
+
+### 🐳 Deployment Documentation
+- **[Docker Setup](./docs/DOCKER_SETUP.md)** - Container orchestration and deployment

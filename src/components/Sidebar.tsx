@@ -13,6 +13,7 @@ import {
 import {
   Dashboard,
   Security,
+  Gavel,
 } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -34,6 +35,12 @@ const menuItems = [
     icon: <Security />, 
     path: '/threat-intelligence',
     description: 'Live threat OSINT & security alerts'
+  },
+  { 
+    text: 'Address Screening', 
+    icon: <Gavel />, 
+    path: '/address-screening',
+    description: 'Bitcoin address sanction screening'
   },
 ];
 

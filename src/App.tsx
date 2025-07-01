@@ -6,6 +6,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import DashboardOverview from './pages/DashboardOverview';
 import ThreatIntelligence from './pages/ThreatIntelligence';
+import AddressScreening from './pages/AddressScreening';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
@@ -49,6 +50,11 @@ function App() {
               <Route path="/threat-intelligence" element={
                 <ErrorBoundary>
                   <ThreatIntelligence />
+                </ErrorBoundary>
+              } />
+              <Route path="/address-screening" element={
+                <ErrorBoundary>
+                  <AddressScreening />
                 </ErrorBoundary>
               } />
             </Routes>

@@ -1,6 +1,7 @@
 // Backend service URLs
 const THREAT_INTEL_API_URL = import.meta.env.VITE_THREAT_INTEL_API_URL || 'http://localhost:8000';
 const STABLECOIN_MONITOR_API_URL = import.meta.env.VITE_STABLECOIN_MONITOR_API_URL || 'http://localhost:8001';
+const SANCTION_DETECTOR_API_URL = import.meta.env.VITE_SANCTION_DETECTOR_API_URL || 'http://localhost:3000';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'; // Legacy API for backward compatibility
 
 // Threat Intelligence API interfaces
@@ -56,6 +57,92 @@ export interface StablecoinResponse {
   alerts: StablecoinAlert[];
   total_monitored: number;
   last_updated: string;
+}
+
+// Sanction Detector API interfaces
+export interface SanctionMatch {
+  listSource: string;
+  entityName: string;
+  entityId: string;
+  matchType: 'DIRECT' | 'INDIRECT' | 'CLUSTER';
+  confidence: number;
+  matchedAddress: string;
+}
+
+export interface AddressScreeningResult {
+  address: string;
+  riskScore: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  sanctionMatches: SanctionMatch[];
+  timestamp: string;
+  confidence: number;
+  processingTimeMs: number;
+}
+
+// Transaction Screening interfaces
+export interface TransactionAddress {
+  address: string;
+  riskScore: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  sanctionMatches: SanctionMatch[];
+}
+
+export interface TransactionScreeningResult {
+  txHash: string;
+  inputAddresses: TransactionAddress[];
+  outputAddresses: TransactionAddress[];
+  overallRiskScore: number;
+  overallRiskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  sanctionMatchesCount: number;
+  confidence: number;
+  processingTimeMs: number;
+  timestamp: string;
+}
+
+export interface TransactionScreeningRequest {
+  txHash: string;
+  direction?: 'inputs' | 'outputs' | 'both';
+  includeMetadata?: boolean;
+}
+
+export interface BulkScreeningRequest {
+  addresses?: string[];
+  transactions?: string[];
+  batchId?: string;
+  includeTransactionAnalysis?: boolean;
+}
+
+export interface BulkScreeningSummary {
+  totalProcessed: number;
+  highRiskCount: number;
+  sanctionMatchesCount: number;
+  processingTimeMs: number;
+}
+
+export interface BulkScreeningResponse {
+  batchId?: string;
+  summary: BulkScreeningSummary;
+  results: {
+    addresses: AddressScreeningResult[];
+    transactions: TransactionScreeningResult[];
+  };
+  timestamp: string;
+}
+
+export interface SanctionDetectorHealth {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  uptime: number;
+  version: string;
+  environment: string;
+  services: {
+    dataDirectories: {
+      sanctionsDir: boolean;
+      riskAssessmentsDir: boolean;
+      auditLogsDir: boolean;
+      configDir: boolean;
+    };
+  };
 }
 
 // Legacy interfaces for backward compatibility
@@ -299,6 +386,15 @@ class ApiService {
     }
   }
 
+  async getSanctionDetectorHealth(): Promise<SanctionDetectorHealth> {
+    try {
+      return await this.fetchApi<SanctionDetectorHealth>('/', SANCTION_DETECTOR_API_URL);
+    } catch (error) {
+      console.error('[API] Error fetching sanction detector health:', error);
+      return { status: 'unhealthy', timestamp: new Date().toISOString(), uptime: 0, version: '', environment: '', services: { dataDirectories: { sanctionsDir: false, riskAssessmentsDir: false, auditLogsDir: false, configDir: false } } };
+    }
+  }
+
   async getApiInfo(): Promise<ApiResponse> {
     return this.fetchApi<ApiResponse>('/');
   }
@@ -363,6 +459,174 @@ class ApiService {
       addresses: [],
       message: "Authentication required for tracked addresses endpoint"
     };
+  }
+
+  // Sanction Detector API methods
+  async screenAddress(
+    address: string, 
+    includeTransactionAnalysis: boolean = false, 
+    maxHops: number = 5
+  ): Promise<AddressScreeningResult> {
+    try {
+      const payload = {
+        address,
+        includeTransactionAnalysis,
+        maxHops
+      };
+      
+      const url = `${SANCTION_DETECTOR_API_URL}/api/screening/address`;
+      console.log(`[API] Screening address: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json' 
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`[API] Address screening response:`, result);
+      
+      return result.data;
+    } catch (error) {
+      console.error('[API] Error screening address:', error);
+      throw error;
+    }
+  }
+
+  async screenTransaction(request: TransactionScreeningRequest): Promise<TransactionScreeningResult> {
+    try {
+      const payload = {
+        txHash: request.txHash,
+        direction: request.direction || 'both',
+        includeMetadata: request.includeMetadata || false
+      };
+      
+      const url = `${SANCTION_DETECTOR_API_URL}/api/screening/transaction`;
+      console.log(`[API] Screening transaction: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json' 
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`[API] Transaction screening response:`, result);
+      
+      return result.data;
+    } catch (error) {
+      console.error('[API] Error screening transaction:', error);
+      throw error;
+    }
+  }
+
+  async bulkScreening(request: BulkScreeningRequest): Promise<BulkScreeningResponse> {
+    try {
+      const url = `${SANCTION_DETECTOR_API_URL}/api/screening/bulk`;
+      console.log(`[API] Bulk screening: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json' 
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`[API] Bulk screening response:`, result);
+      
+      // Transform the API response to match our interface
+      if (result.success && result.data) {
+        const apiData = result.data;
+        
+        // Calculate processing time from individual results
+        const totalProcessingTime = (
+          (apiData.addresses?.reduce((sum: number, addr: any) => 
+            sum + (addr.processingTimeMs || 0), 0) || 0) +
+          (apiData.transactions?.reduce((sum: number, tx: any) => 
+            sum + (tx.processingTimeMs || 0), 0) || 0)
+        );
+        
+        // Count sanction matches from addresses and transactions
+        const addressSanctionMatches = apiData.addresses?.reduce((sum: number, addr: any) => 
+          sum + (addr.sanctionMatches?.length || 0), 0) || 0;
+        
+        const transactionSanctionMatches = apiData.transactions?.reduce((sum: number, tx: any) => 
+          sum + (tx.sanctionMatchesCount || 0), 0) || 0;
+        
+        const sanctionMatchesCount = addressSanctionMatches + transactionSanctionMatches;
+        
+        const transformedResponse: BulkScreeningResponse = {
+          batchId: request.batchId,
+          summary: {
+            totalProcessed: (apiData.addresses?.length || 0) + (apiData.transactions?.length || 0),
+            highRiskCount: apiData.summary?.highRiskItems || 0,
+            sanctionMatchesCount: sanctionMatchesCount,
+            processingTimeMs: totalProcessingTime
+          },
+          results: {
+            addresses: apiData.addresses || [],
+            transactions: apiData.transactions || []
+          },
+          timestamp: result.timestamp || new Date().toISOString()
+        };
+        
+        return transformedResponse;
+      } else {
+        throw new Error('Invalid API response structure');
+      }
+    } catch (error) {
+      console.error('[API] Error in bulk screening:', error);
+      throw error;
+    }
+  }
+
+  async getSanctionDetectorHealthDetailed(): Promise<SanctionDetectorHealth> {
+    try {
+      const response = await this.fetchApi<{ data: SanctionDetectorHealth }>(
+        '/api/health', 
+        SANCTION_DETECTOR_API_URL
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('[API] Error fetching sanction detector health:', error);
+      return { 
+        status: 'unhealthy', 
+        timestamp: new Date().toISOString(), 
+        uptime: 0, 
+        version: '', 
+        environment: '', 
+        services: { 
+          dataDirectories: { 
+            sanctionsDir: false, 
+            riskAssessmentsDir: false, 
+            auditLogsDir: false, 
+            configDir: false 
+          } 
+        } 
+      };
+    }
   }
 }
 

@@ -4,15 +4,18 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:80"
+      - "3002:80"
     depends_on:
       defi-guard-threat-intel:
         condition: service_healthy
       defi-guard-stablecoin-monitor:
         condition: service_healthy
+      sanction-detector:
+        condition: service_healthy
     environment:
       - REACT_APP_THREAT_INTEL_API_URL=http://localhost:8000
       - REACT_APP_STABLECOIN_MONITOR_API_URL=http://localhost:8001
+      - REACT_APP_SANCTION_DETECTOR_API_URL=http://localhost:3000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/"]
       interval: 30s
@@ -85,6 +88,32 @@ services:
     networks:
       - defi-guard-network
 
+  # Bitcoin Sanction Detector Service
+  sanction-detector:
+    image: sanction-detector:latest  # Reference to the sanction detector image
+    build:
+      context: https://github.com/Parsh/sanction-detector.git
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_LEVEL=info
+    volumes:
+      - sanction-data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const options = { hostname: 'localhost', port: 3000, path: '/api/health', timeout: 2000 }; const req = http.get(options, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.on('timeout', () => process.exit(1));"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - defi-guard-network
+
 networks:
   defi-guard-network:
     driver: bridge
+
+volumes:
+  sanction-data:
