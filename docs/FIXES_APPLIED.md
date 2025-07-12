@@ -32,7 +32,17 @@
 - Added volumes for SQLite database persistence
 - Set up service dependencies and networking
 
-### 2. Clarified Screening Capabilities
+### 2. Fixed Header Component Build Error (Latest)
+**Problem**: TypeScript compilation was failing due to Header component props mismatch.
+- ❌ Old: App.tsx passing `onNotificationClick` and `alertCount` props to Header
+- ✅ Fixed: Removed prop interface from Header component and updated App.tsx
+- 🛠️ **Changes**:
+  - Simplified Header component to remove unused notification and settings functionality
+  - Removed `HeaderProps` interface
+  - Updated `App.tsx` to call `<Header />` without props
+  - Successfully rebuilt and deployed all containers
+
+### 3. Clarified Screening Capabilities
 **Important Distinction**:
 - 🌐 **Address Screening**: Supports ANY blockchain address (Bitcoin, Ethereum, Binance Smart Chain, Polygon, etc.)
 - ₿ **Transaction Screening**: Bitcoin-only (requires Bitcoin transaction IDs)

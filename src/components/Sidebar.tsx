@@ -14,6 +14,9 @@ import {
   Dashboard,
   Security,
   Gavel,
+  Shield,
+  AccountBalance,
+  Assessment,
 } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -41,6 +44,24 @@ const menuItems = [
     icon: <Gavel />, 
     path: '/address-screening',
     description: 'Bitcoin address sanction screening'
+  },
+  { 
+    text: 'DeFi Risk Assessment', 
+    icon: <Assessment />, 
+    path: '/defi-risk-assessment',
+    description: 'Protocol risk analysis & assessment'
+  },
+  { 
+    text: 'Stablecoin Monitoring', 
+    icon: <AccountBalance />, 
+    path: '/stablecoin-monitoring',
+    description: 'Real-time stablecoin price tracking'
+  },
+  { 
+    text: 'Scam Address Checker', 
+    icon: <Shield />, 
+    path: '/scam-address-checker',
+    description: 'Multi-chain scam address detection'
   },
 ];
 

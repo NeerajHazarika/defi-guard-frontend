@@ -4,24 +4,13 @@ import {
   Toolbar,
   Typography,
   Box,
-  IconButton,
-  Badge,
-  Tooltip,
   Chip,
 } from '@mui/material';
 import {
-  Notifications,
-  Settings,
-  AccountCircle,
   NetworkCheck,
 } from '@mui/icons-material';
 
-interface HeaderProps {
-  onNotificationClick: () => void;
-  alertCount: number;
-}
-
-const Header: React.FC<HeaderProps> = ({ onNotificationClick, alertCount }) => {
+const Header: React.FC = () => {
   return (
     <AppBar 
       position="fixed" 
@@ -49,27 +38,6 @@ const Header: React.FC<HeaderProps> = ({ onNotificationClick, alertCount }) => {
               fontWeight: 600,
             }} 
           />
-        </Box>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <IconButton
-            onClick={onNotificationClick}
-            sx={{ color: 'white' }}
-          >
-            <Badge badgeContent={alertCount} color="error">
-              <Notifications />
-            </Badge>
-          </IconButton>
-
-          <IconButton sx={{ color: 'white' }}>
-            <Settings />
-          </IconButton>
-
-          <Tooltip title="Account settings" arrow>
-            <IconButton sx={{ color: 'white' }}>
-              <AccountCircle />
-            </IconButton>
-          </Tooltip>
         </Box>
       </Toolbar>
     </AppBar>

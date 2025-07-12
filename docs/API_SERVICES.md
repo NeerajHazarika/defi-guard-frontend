@@ -2,7 +2,20 @@
 
 ## Overview
 
-Complete reference for all backend API integrations in the DeFi Guard frontend.
+Complete reference for all backend API integrations in the DeFi Guard frontend platform.
+
+## Service Architecture
+
+The platform consists of six services communicating via REST APIs:
+
+| Service | Port | Technology | Purpose |
+|---------|------|------------|---------|
+| Frontend | 3002 | React/TS/Nginx | User Interface |
+| Sanction Detector | 3000 | Node.js/TypeScript | Bitcoin OFAC screening |
+| Scam Detector | 3001 | Node.js | Multi-blockchain scam detection |
+| DeFi Risk Assessment | 3003 | Node.js/TypeScript | Protocol security analysis |
+| Threat Intelligence | 8000 | Python/FastAPI | OSINT threat monitoring |
+| Stablecoin Monitor | 8001 | Python/FastAPI | Depeg detection & alerts |
 
 ## Service Configuration
 
@@ -12,6 +25,8 @@ Complete reference for all backend API integrations in the DeFi Guard frontend.
 const THREAT_INTEL_API_URL = import.meta.env.VITE_THREAT_INTEL_API_URL || 'http://localhost:8000';
 const STABLECOIN_MONITOR_API_URL = import.meta.env.VITE_STABLECOIN_MONITOR_API_URL || 'http://localhost:8001';
 const SANCTION_DETECTOR_API_URL = import.meta.env.VITE_SANCTION_DETECTOR_API_URL || 'http://localhost:3000';
+const SCAM_DETECTOR_API_URL = import.meta.env.VITE_SCAM_DETECTOR_API_URL || 'http://localhost:3001';
+const DEFI_RISK_API_URL = import.meta.env.VITE_DEFI_RISK_API_URL || 'http://localhost:3003';
 ```
 
 ### Docker Environment Setup
@@ -21,6 +36,8 @@ environment:
   - REACT_APP_THREAT_INTEL_API_URL=http://localhost:8000
   - REACT_APP_STABLECOIN_MONITOR_API_URL=http://localhost:8001
   - REACT_APP_SANCTION_DETECTOR_API_URL=http://localhost:3000
+  - REACT_APP_SCAM_DETECTOR_API_URL=http://localhost:3001
+  - REACT_APP_DEFI_RISK_API_URL=http://localhost:3003
 ```
 
 ## 🛡️ Sanction Detector Service API
@@ -150,6 +167,173 @@ const result = await apiService.bulkScreening({
   transactions: ['abcdef1234567890...'],
   batchId: 'batch-001'
 });
+```
+
+## 🔍 Scam Detector Service API
+
+### Base URL: `http://localhost:3001`
+
+#### Health Check
+```typescript
+GET /
+// Response
+{
+  message: "Scam Detector Service is running",
+  status: "healthy",
+  timestamp: "2025-07-12T09:00:00.000Z"
+}
+```
+
+#### Address Risk Assessment
+```typescript
+POST /api/check-address
+// Request
+{
+  address: string,
+  blockchain?: string  // 'bitcoin', 'ethereum', 'bsc', 'polygon', etc.
+}
+
+// Response
+{
+  success: true,
+  data: {
+    address: string,
+    blockchain: string,
+    riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+    riskScore: number,
+    isScam: boolean,
+    confidence: number,
+    reasons: string[],
+    sources: string[],
+    lastUpdated: string,
+    processingTimeMs: number
+  }
+}
+
+// Frontend Usage
+const result = await fetch('http://localhost:3001/api/check-address', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    address: '0x1234567890abcdef...',
+    blockchain: 'ethereum'
+  })
+});
+```
+
+#### Bulk Address Screening
+```typescript
+POST /api/bulk-check
+// Request
+{
+  addresses: Array<{
+    address: string,
+    blockchain?: string
+  }>,
+  batchId?: string
+}
+
+// Response
+{
+  success: true,
+  data: {
+    batchId: string,
+    results: Array<AddressRiskResult>,
+    totalProcessed: number,
+    processingTimeMs: number
+  }
+}
+```
+
+## 📊 DeFi Risk Assessment Service API
+
+### Base URL: `http://localhost:3003`
+
+#### Health Check
+```typescript
+GET /
+// Response
+{
+  status: "healthy",
+  service: "DeFi Risk Assessment",
+  timestamp: "2025-07-12T09:00:00.000Z",
+  uptime: 3600
+}
+```
+
+#### Protocol Risk Assessment
+```typescript
+POST /api/assess-protocol
+// Request
+{
+  protocolAddress: string,
+  blockchain: string,
+  includeGovernance?: boolean,
+  includeTVL?: boolean
+}
+
+// Response
+{
+  success: true,
+  data: {
+    protocolAddress: string,
+    protocolName: string,
+    blockchain: string,
+    overallRiskScore: number,
+    riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+    findings: Array<{
+      id: string,
+      category: string,
+      severity: 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+      title: string,
+      description: string,
+      impact: string,
+      recommendation: string
+    }>,
+    metrics: {
+      tvl: number,
+      governanceScore: number,
+      codeQualityScore: number,
+      auditScore: number
+    },
+    recommendations: string[],
+    lastAssessed: string,
+    processingTimeMs: number
+  }
+}
+
+// Frontend Usage
+const result = await fetch('http://localhost:3003/api/assess-protocol', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    protocolAddress: '0xabcdef1234567890...',
+    blockchain: 'ethereum',
+    includeGovernance: true,
+    includeTVL: true
+  })
+});
+```
+
+#### Protocol List
+```typescript
+GET /api/protocols?blockchain=ethereum&category=lending
+// Response
+{
+  success: true,
+  data: {
+    protocols: Array<{
+      address: string,
+      name: string,
+      category: string,
+      blockchain: string,
+      tvl: number,
+      lastRiskScore: number,
+      lastAssessed: string
+    }>,
+    total: number
+  }
+}
 ```
 
 ## 🕵️ Threat Intelligence Service API

@@ -2,7 +2,12 @@
 const THREAT_INTEL_API_URL = import.meta.env.VITE_THREAT_INTEL_API_URL || 'http://localhost:8000';
 const STABLECOIN_MONITOR_API_URL = import.meta.env.VITE_STABLECOIN_MONITOR_API_URL || 'http://localhost:8001';
 const SANCTION_DETECTOR_API_URL = import.meta.env.VITE_SANCTION_DETECTOR_API_URL || 'http://localhost:3000';
+const SCAM_DETECTOR_API_URL = import.meta.env.VITE_SCAM_DETECTOR_API_URL || 'http://localhost:3001';
+const DEFI_RISK_ASSESSMENT_API_URL = import.meta.env.VITE_DEFI_RISK_ASSESSMENT_API_URL || 'http://localhost:3003';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'; // Legacy API for backward compatibility
+
+// Import types
+import type { ScamAddressResponse, ScamAddressError } from '../types';
 
 // Threat Intelligence API interfaces
 export interface ThreatIntelItem {
@@ -218,6 +223,155 @@ export interface Exploit {
   metadata: any;
   status: 'active' | 'resolved' | 'investigating';
   lossAmount?: number; // computed field for backwards compatibility
+}
+
+// DeFi Risk Assessment API interfaces
+export interface Protocol {
+  id: string;
+  name: string;
+  description?: string;
+  website?: string;
+  category?: string;
+  chainId?: number;
+  contractAddress?: string;
+  deployed_date?: string;
+  audit_reports?: string[];
+  governance_token?: string;
+  tvl_usd?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RiskAssessmentResult {
+  technical: {
+    score: number;
+    findings: Array<{
+      category: string;
+      severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+      title: string;
+      description: string;
+      impact?: string;
+      confidence: number;
+    }>;
+    vulnerabilities_count: number;
+    code_quality_score: number;
+    audit_coverage: number;
+  };
+  governance: {
+    score: number;
+    decentralization_score: number;
+    token_distribution: {
+      gini_coefficient: number;
+      top_10_holders_percentage: number;
+    };
+    voting_mechanism: string;
+    proposal_activity: number;
+    multisig_threshold?: string;
+  };
+  liquidity: {
+    score: number;
+    tvl_usd: number;
+    volume_24h_usd: number;
+    market_depth: number;
+    slippage_analysis: {
+      '1k_usd': number;
+      '10k_usd': number;
+      '100k_usd': number;
+    };
+  };
+  reputation: {
+    score: number;
+    team_score: number;
+    development_activity: number;
+    code_quality: number;
+    audit_history: {
+      audit_count: number;
+      last_audit_date?: string;
+      audit_firms: string[];
+    };
+    historical_exploits: number;
+  };
+}
+
+export interface Assessment {
+  id: string;
+  protocolId: string;
+  contractAddress?: string;
+  chainId?: number;
+  analysisTypes: string[];
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  riskScore: number;
+  riskLevel: 'very_low' | 'low' | 'medium' | 'high' | 'very_high';
+  confidence: number;
+  results?: RiskAssessmentResult;
+  findings?: Array<{
+    category: string;
+    severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+    title: string;
+    description: string;
+    recommendation?: string;
+  }>;
+  recommendations?: string[];
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+  error_message?: string;
+  processing_time_ms?: number;
+}
+
+export interface CreateAssessmentRequest {
+  protocolId: string;
+  contractAddress?: string;
+  chainId?: number;
+  analysisTypes?: string[];
+  force_refresh?: boolean;
+}
+
+export interface AssessmentsListResponse {
+  assessments: Assessment[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+export interface ProtocolsListResponse {
+  protocols: Protocol[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+export interface CreateProtocolRequest {
+  name: string;
+  description?: string;
+  website?: string;
+  category?: string;
+  chainId?: number;
+  contractAddress?: string;
+  deployed_date?: string;
+  audit_reports?: string[];
+  governance_token?: string;
+}
+
+export interface RiskAssessmentHealth {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  uptime: number;
+  version: string;
+  environment: string;
+  services: {
+    slither: boolean;
+    blockchain_rpc: boolean;
+    external_apis: {
+      etherscan: boolean;
+      defillama: boolean;
+      coingecko: boolean;
+    };
+  };
+  cache_stats: {
+    hit_rate: number;
+    size: number;
+  };
 }
 
 class ApiService {
@@ -631,3 +785,285 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
+
+// Scam Address Detection API
+export const scamDetectorApi = {
+  async checkAddress(address: string): Promise<ScamAddressResponse | ScamAddressError> {
+    try {
+      const response = await fetch(`${SCAM_DETECTOR_API_URL}/api/check-address/${encodeURIComponent(address)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          error: `HTTP ${response.status}`,
+          details: errorText || 'Unknown error occurred'
+        };
+      }
+
+      const data = await response.json();
+      return data as ScamAddressResponse;
+    } catch (error) {
+      return {
+        error: 'Network Error',
+        details: error instanceof Error ? error.message : 'Failed to connect to scam detector service'
+      };
+    }
+  },
+
+  async healthCheck(): Promise<{ status: string; timestamp: string } | { error: string }> {
+    try {
+      const response = await fetch(`${SCAM_DETECTOR_API_URL}/health`);
+      if (!response.ok) {
+        return { error: `Health check failed: HTTP ${response.status}` };
+      }
+      return await response.json();
+    } catch (error) {
+      return { 
+        error: error instanceof Error ? error.message : 'Health check failed' 
+      };
+    }
+  }
+};
+
+// DeFi Risk Assessment API
+export const defiRiskAssessmentApi = {
+  // Protocol Management
+  async getProtocols(page = 1, perPage = 20): Promise<ProtocolsListResponse> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/protocols?page=${page}&per_page=${perPage}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[API] Error fetching protocols:', error);
+      throw error;
+    }
+  },
+
+  async getProtocol(id: string): Promise<Protocol> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/protocols/${encodeURIComponent(id)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('[API] Error fetching protocol:', error);
+      throw error;
+    }
+  },
+
+  async createProtocol(protocol: CreateProtocolRequest): Promise<Protocol> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/protocols`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(protocol),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('[API] Error creating protocol:', error);
+      throw error;
+    }
+  },
+
+  async updateProtocol(id: string, protocol: Partial<CreateProtocolRequest>): Promise<Protocol> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/protocols/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(protocol),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('[API] Error updating protocol:', error);
+      throw error;
+    }
+  },
+
+  async deleteProtocol(id: string): Promise<void> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/protocols/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error('[API] Error deleting protocol:', error);
+      throw error;
+    }
+  },
+
+  // Risk Assessment Management
+  async getAssessments(page = 1, perPage = 20, protocolId?: string, status?: string): Promise<AssessmentsListResponse> {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        per_page: perPage.toString(),
+      });
+
+      if (protocolId) params.append('protocol_id', protocolId);
+      if (status) params.append('status', status);
+
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments?${params}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[API] Error fetching assessments:', error);
+      throw error;
+    }
+  },
+
+  async getAssessment(id: string): Promise<Assessment> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments/${encodeURIComponent(id)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('[API] Error fetching assessment:', error);
+      throw error;
+    }
+  },
+
+  async createAssessment(assessment: CreateAssessmentRequest): Promise<Assessment> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(assessment),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('[API] Error creating assessment:', error);
+      throw error;
+    }
+  },
+
+  async deleteAssessment(id: string): Promise<void> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error('[API] Error deleting assessment:', error);
+      throw error;
+    }
+  },
+
+  // Health Check
+  async healthCheck(): Promise<RiskAssessmentHealth> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/health`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data || data;
+    } catch (error) {
+      console.error('[API] Error fetching risk assessment health:', error);
+      return {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        uptime: 0,
+        version: '',
+        environment: '',
+        services: {
+          slither: false,
+          blockchain_rpc: false,
+          external_apis: {
+            etherscan: false,
+            defillama: false,
+            coingecko: false,
+          },
+        },
+        cache_stats: {
+          hit_rate: 0,
+          size: 0,
+        },
+      };
+    }
+  }
+};

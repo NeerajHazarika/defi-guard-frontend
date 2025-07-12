@@ -78,6 +78,8 @@ npm run preview
 
 ### Docker Deployment
 
+**🎯 Status: All Services Running Successfully** ✅
+
 **Using the Management Script (Recommended)**
 ```bash
 # Interactive setup and management
@@ -99,6 +101,16 @@ docker-compose up --build
 
 # Access dashboard at http://localhost:3002
 ```
+
+**Current Service Status:**
+- ✅ Frontend: http://localhost:3002 (Healthy)
+- ✅ Sanction Detector: http://localhost:3000 (Healthy)
+- ✅ Scam Detector: http://localhost:3001 (Healthy)
+- ✅ DeFi Risk Assessment: http://localhost:3003 (Healthy)
+- ✅ Threat Intelligence: http://localhost:8000 (Healthy)
+- ✅ Stablecoin Monitor: http://localhost:8001 (Healthy)
+
+> **Recent Fix Applied**: Resolved TypeScript compilation error in Header component. All containers now build and deploy successfully.
 
 ## 🏗️ Project Structure
 
@@ -417,12 +429,14 @@ For comprehensive documentation and development guides, see the [docs](./docs/) 
 - **[Quick Start Guide](./docs/QUICK_START.md)** - Get running in 1 minute
 - **[Architecture Overview](./docs/ARCHITECTURE.md)** - System design and service interactions
 - **[API Services](./docs/API_SERVICES.md)** - Complete API integration reference
+- **[Changelog](./docs/CHANGELOG.md)** - Version history and recent changes
 - **[Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and solutions
 
 ### 🔧 Development Documentation
 - **[Frontend Components](./docs/FRONTEND_COMPONENTS.md)** - React components and UI patterns
 - **[Data Models](./docs/DATA_MODELS.md)** - TypeScript interfaces and data structures
 - **[Configuration](./docs/CONFIGURATION.md)** - Environment variables and settings
+- **[Fixes Applied](./docs/FIXES_APPLIED.md)** - Recent bug fixes and improvements
 
 ### 🛡️ Service Documentation
 - **[Sanction Detector](./docs/SANCTION_DETECTOR.md)** - Address/transaction screening service

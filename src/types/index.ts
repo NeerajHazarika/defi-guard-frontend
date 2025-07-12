@@ -88,3 +88,19 @@ export interface UserRiskProfile {
   transactionCount: number;
   totalVolume: string;
 }
+
+// Scam Address Detection types
+export interface ScamAddressResponse {
+  network: string;
+  address: string;
+  reportCount: string;
+  riskLevel: 'Clean' | 'Low' | 'Medium' | 'High';
+  srcUrl: string;
+}
+
+export interface ScamAddressError {
+  error: string;
+  details?: string;
+}
+
+export type ScamCheckResult = ScamAddressResponse | ScamAddressError;

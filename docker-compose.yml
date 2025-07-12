@@ -12,10 +12,16 @@ services:
         condition: service_healthy
       sanction-detector:
         condition: service_healthy
+      scam-detector:
+        condition: service_healthy
+      defi-risk-assessment:
+        condition: service_healthy
     environment:
-      - REACT_APP_THREAT_INTEL_API_URL=http://localhost:8000
-      - REACT_APP_STABLECOIN_MONITOR_API_URL=http://localhost:8001
-      - REACT_APP_SANCTION_DETECTOR_API_URL=http://localhost:3000
+      - VITE_THREAT_INTEL_API_URL=http://defi-guard-threat-intel:8000
+      - VITE_STABLECOIN_MONITOR_API_URL=http://defi-guard-stablecoin-monitor:8001
+      - VITE_SANCTION_DETECTOR_API_URL=http://sanction-detector:3000
+      - VITE_SCAM_DETECTOR_API_URL=http://scam-detector:3001
+      - VITE_DEFI_RISK_ASSESSMENT_API_URL=http://defi-risk-assessment:3003
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/"]
       interval: 30s
@@ -31,6 +37,7 @@ services:
       sh -c "
         apt-get update && 
         apt-get install -y curl git && 
+        rm -rf /app &&
         git clone https://github.com/NeerajHazarika/defi-guard-threat-intel-osint.git /app &&
         cd /app && 
         mkdir -p /app/data &&
@@ -61,15 +68,16 @@ services:
       sh -c "
         apt-get update && 
         apt-get install -y curl git && 
+        rm -rf /app &&
         git clone https://github.com/NeerajHazarika/defi-guard-stable-coin-monitor.git /app &&
         cd /app && 
         mkdir -p /app/data &&
         pip install -r requirements.txt && 
         python init_db.py &&
-        uvicorn services.stablecoin_monitor.main:app --host 0.0.0.0 --port 8000
+        uvicorn services.stablecoin_monitor.main:app --host 0.0.0.0 --port 8001
       "
     ports:
-      - "8001:8000"
+      - "8001:8001"
     environment:
       - DATABASE_URL=sqlite:////app/data/stablecoin_monitor.db
       - PEG_CHECK_INTERVAL=60
@@ -80,7 +88,7 @@ services:
       - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
       - PYTHONPATH=/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -111,9 +119,108 @@ services:
     networks:
       - defi-guard-network
 
+  # Multi-Chain Scam Address Detector Service
+  scam-detector:
+    image: node:18-slim
+    command: >
+      sh -c "
+        apt-get update && 
+        apt-get install -y curl git wget && 
+        rm -rf /app &&
+        git clone https://github.com/NeerajHazarika/defi-guard-scam-detector.git /app &&
+        cd /app && 
+        npm install && 
+        PORT=3001 npm start
+      "
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - CHECKCRYPTOADDRESS_API_KEY=${CHECKCRYPTOADDRESS_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - defi-guard-network
+
+  # DeFi Protocol Risk Assessment Service
+  defi-risk-assessment:
+    image: node:20-alpine
+    working_dir: /tmp/build
+    command: >
+      sh -c "
+        apk add --no-cache git python3 py3-pip gcc musl-dev libffi-dev openssl-dev python3-dev build-base curl py3-virtualenv &&
+        git clone https://github.com/Parsh/protocol-risk-assessment.git . &&
+        python3 -m venv venv &&
+        source venv/bin/activate &&
+        pip install --no-cache-dir slither-analyzer==0.10.0 crytic-compile==0.3.6 solc-select==1.0.4 &&
+        solc-select install 0.8.19 && solc-select use 0.8.19 &&
+        npm install -g typescript ts-node &&
+        npm ci &&
+        npm install @types/cors @types/node @types/express &&
+        echo '{\"compilerOptions\":{\"target\":\"ES2020\",\"module\":\"commonjs\",\"outDir\":\"./dist\",\"strict\":false,\"esModuleInterop\":true,\"skipLibCheck\":true,\"forceConsistentCasingInFileNames\":true,\"types\":[\"node\"],\"moduleResolution\":\"node\"},\"include\":[\"src/**/*\"],\"exclude\":[\"node_modules\",\"dist\"]}' > tsconfig.json &&
+        npm run build &&
+        mkdir -p /app/data/{protocols,assessments,cache,logs,temp,backups} &&
+        mkdir -p /app/data/cache/{etherscan,bscscan,polygonscan,defillama,coingecko,slither} &&
+        cp .env.example /app/.env &&
+        cp -r dist node_modules package.json /app/ &&
+        cd /app &&
+        ls -la dist/ &&
+        node dist/index.js || node dist/src/index.js
+      "
+    ports:
+      - "3003:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_LEVEL=info
+      - API_RATE_LIMIT=100
+      - API_RATE_WINDOW=900000
+      
+      # External API Keys (optional - uses mock data if not provided)
+      - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-}
+      - BSCSCAN_API_KEY=${BSCSCAN_API_KEY:-}
+      - POLYGONSCAN_API_KEY=${POLYGONSCAN_API_KEY:-}
+      - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
+      
+      # Analysis Configuration
+      - SLITHER_TIMEOUT=300000
+      - PARALLEL_ANALYSIS=true
+      - CACHE_TTL=3600000
+      
+      # Risk Scoring Configuration (weights must sum to 1.0)
+      - TECHNICAL_WEIGHT=0.4
+      - GOVERNANCE_WEIGHT=0.25
+      - LIQUIDITY_WEIGHT=0.2
+      - REPUTATION_WEIGHT=0.15
+      
+      # Blockchain RPC URLs (optional - uses public RPCs if not provided)
+      - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL:-https://eth.drpc.org}
+      - BSC_RPC_URL=${BSC_RPC_URL:-https://bsc-dataseed.binance.org}
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL:-https://polygon-rpc.com}
+    volumes:
+      - defi-risk-data:/app/data
+      - defi-risk-logs:/app/logs
+      - defi-risk-tmp:/app/tmp
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/v1/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+    networks:
+      - defi-guard-network
+
 networks:
   defi-guard-network:
     driver: bridge
 
 volumes:
   sanction-data:
+  defi-risk-data:
+  defi-risk-logs:
+  defi-risk-tmp:

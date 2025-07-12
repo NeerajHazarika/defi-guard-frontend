@@ -7,25 +7,20 @@ import Sidebar from './components/Sidebar';
 import DashboardOverview from './pages/DashboardOverview';
 import ThreatIntelligence from './pages/ThreatIntelligence';
 import AddressScreening from './pages/AddressScreening';
+import DeFiRiskAssessment from './pages/DeFiRiskAssessment';
+import StablecoinMonitoring from './pages/StablecoinMonitoring';
+import ScamAddressChecker from './pages/ScamAddressChecker';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
   const [sidebarOpen] = useState(true);
-  const [alertCount] = useState(12);
-
-  const handleNotificationClick = () => {
-    console.log('Notifications clicked');
-  };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
         <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-          <Header 
-            onNotificationClick={handleNotificationClick}
-            alertCount={alertCount}
-          />
+          <Header />
           <Sidebar open={sidebarOpen} />
           <Box
             component="main"
@@ -55,6 +50,21 @@ function App() {
               <Route path="/address-screening" element={
                 <ErrorBoundary>
                   <AddressScreening />
+                </ErrorBoundary>
+              } />
+              <Route path="/defi-risk-assessment" element={
+                <ErrorBoundary>
+                  <DeFiRiskAssessment />
+                </ErrorBoundary>
+              } />
+              <Route path="/stablecoin-monitoring" element={
+                <ErrorBoundary>
+                  <StablecoinMonitoring />
+                </ErrorBoundary>
+              } />
+              <Route path="/scam-address-checker" element={
+                <ErrorBoundary>
+                  <ScamAddressChecker />
                 </ErrorBoundary>
               } />
             </Routes>

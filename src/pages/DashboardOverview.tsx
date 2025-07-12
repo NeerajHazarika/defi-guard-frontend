@@ -5,8 +5,6 @@ import {
   CardContent,
   Typography,
   Grid,
-  Alert,
-  AlertTitle,
   Chip,
   List,
   ListItem,
@@ -27,7 +25,6 @@ import {
   Assessment,
   BugReport,
   NewReleases,
-  AccountBalance,
   Warning,
   OpenInNew,
   Sort,
@@ -45,8 +42,6 @@ const DashboardOverview: React.FC = () => {
   const { health, stats, protocols } = useApiData();
   const { 
     threatIntel, 
-    stablecoins, 
-    stablecoinAlerts,
     loading,
     threatIntelLoading
   } = useBackendData();
@@ -128,13 +123,11 @@ const DashboardOverview: React.FC = () => {
   // Calculate real metrics from actual backend data
   const metrics = {
     threatIntelCount: threatIntel.length,
-    stablecoinCount: stablecoins.length,
-    criticalAlerts: stablecoinAlerts.filter(a => a.severity === 'critical').length,
     highThreatNews: threatIntel.filter(t => t.threat_level >= 8).length,
     monitoredProtocols: protocols?.total || 0,
     trackedAddresses: stats?.tracked_addresses || 0,
-    overallRiskLevel: (stablecoinAlerts.filter(a => a.severity === 'critical' || a.severity === 'high').length > 0 ? 'HIGH' : 
-                     stablecoinAlerts.filter(a => a.severity === 'medium').length > 0 ? 'MEDIUM' : 'LOW') as 'HIGH' | 'MEDIUM' | 'LOW'
+    overallRiskLevel: (threatIntel.filter(t => t.threat_level >= 8).length > 0 ? 'HIGH' : 
+                     threatIntel.filter(t => t.threat_level >= 6).length > 0 ? 'MEDIUM' : 'LOW') as 'HIGH' | 'MEDIUM' | 'LOW'
   };
 
   return (
@@ -157,25 +150,6 @@ const DashboardOverview: React.FC = () => {
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
-            title="Stablecoins"
-            value={metrics.stablecoinCount}
-            subtitle="Monitored coins"
-            icon={<AccountBalance />}
-            color="primary.main"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricCard
-            title="Critical Alerts"
-            value={metrics.criticalAlerts}
-            subtitle="Stablecoin issues"
-            icon={<Warning />}
-            color={metrics.criticalAlerts > 0 ? "error.main" : "success.main"}
-            riskLevel={metrics.criticalAlerts > 0 ? "CRITICAL" : "LOW"}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricCard
             title="High Threat News"
             value={metrics.highThreatNews}
             subtitle="Level 8+ reports"
@@ -184,29 +158,29 @@ const DashboardOverview: React.FC = () => {
             riskLevel={metrics.highThreatNews > 3 ? "HIGH" : "MEDIUM"}
           />
         </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Attack Surface"
+            value={metrics.monitoredProtocols}
+            subtitle="Monitored protocols"
+            icon={<Security />}
+            color="primary.main"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Tracked Addresses"
+            value={metrics.trackedAddresses}
+            subtitle="Under monitoring"
+            icon={<Assessment />}
+            color="info.main"
+          />
+        </Grid>
       </Grid>
 
       {/* Backend Integration Metrics */}
       {health && stats && protocols && (
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <MetricCard
-              title="Attack Surface"
-              value={metrics.monitoredProtocols}
-              subtitle="Monitored protocols"
-              icon={<Security />}
-              color="primary.main"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <MetricCard
-              title="Tracked Addresses"
-              value={metrics.trackedAddresses}
-              subtitle="Under monitoring"
-              icon={<Assessment />}
-              color="info.main"
-            />
-          </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <MetricCard
               title="System Status"
@@ -232,126 +206,6 @@ const DashboardOverview: React.FC = () => {
       )}
 
       <Grid container spacing={3}>
-        {/* Stablecoin Alerts - Real Data Only */}
-        {stablecoinAlerts.length > 0 && (
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-                  Stablecoin Security Alerts
-                  <Chip 
-                    label={`${stablecoinAlerts.length} alerts`} 
-                    size="small" 
-                    sx={{ ml: 2 }} 
-                    color={stablecoinAlerts.some(a => a.severity === 'critical') ? "error" : "warning"}
-                  />
-                </Typography>
-                <Box sx={{ maxHeight: 320, overflowY: 'auto' }}>
-                  {stablecoinAlerts.slice(0, 5).map((alert) => (
-                    <Alert 
-                      key={alert.id}
-                      severity={
-                        alert.severity === 'critical' ? 'error' : 
-                        alert.severity === 'high' ? 'error' :
-                        alert.severity === 'medium' ? 'warning' : 'info'
-                      }
-                      sx={{ mb: 2 }}
-                    >
-                      <AlertTitle>
-                        {alert.coin_symbol} - {alert.alert_type}
-                        <Chip 
-                          label={alert.severity.toUpperCase()} 
-                          size="small" 
-                          sx={{ ml: 1 }} 
-                          color={
-                            alert.severity === 'critical' ? 'error' : 
-                            alert.severity === 'high' ? 'error' :
-                            alert.severity === 'medium' ? 'warning' : 'info'
-                          }
-                        />
-                      </AlertTitle>
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        {alert.message}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        {new Date(alert.timestamp).toLocaleString()}
-                      </Typography>
-                    </Alert>
-                  ))}
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-
-        {/* Stablecoin Monitoring */}
-        {stablecoins.length > 0 && (
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-                  Stablecoin Price Monitoring
-                  <Chip 
-                    label={`${stablecoins.length} coins tracked`} 
-                    size="small" 
-                    sx={{ ml: 2 }} 
-                    color="primary"
-                  />
-                </Typography>
-                <Grid container spacing={2}>
-                  {stablecoins.slice(0, 6).map((coin) => (
-                    <Grid item xs={12} sm={6} md={4} key={coin.symbol}>
-                      <Card variant="outlined" sx={{ p: 2 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            {coin.symbol}
-                          </Typography>
-                          <Chip
-                            label={coin.status.toUpperCase()}
-                            size="small"
-                            color={
-                              coin.status === 'stable' ? 'success' :
-                              coin.status === 'warning' ? 'warning' : 'error'
-                            }
-                          />
-                        </Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          {coin.name}
-                        </Typography>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography variant="body2">Current Price:</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            ${coin.current_price.toFixed(4)}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography variant="body2">Target Price:</Typography>
-                          <Typography variant="body2">
-                            ${coin.target_price.toFixed(4)}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant="body2">Deviation:</Typography>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              fontWeight: 500,
-                              color: Math.abs(coin.deviation_percentage) > 0.5 ? 'error.main' : 
-                                     Math.abs(coin.deviation_percentage) > 0.2 ? 'warning.main' : 'success.main'
-                            }}
-                          >
-                            {coin.deviation_percentage > 0 ? '+' : ''}{coin.deviation_percentage.toFixed(2)}%
-                          </Typography>
-                        </Box>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-
         {/* Threat Intelligence News - Always Show */}
         <Grid item xs={12}>
           <Card>
