@@ -104,3 +104,57 @@ export interface ScamAddressError {
 }
 
 export type ScamCheckResult = ScamAddressResponse | ScamAddressError;
+
+// Enhanced Risk Assessment types for API v1.1
+export interface VulnerabilityDetection {
+  detector_name: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  category: string;
+  title: string;
+  description: string;
+  impact: string;
+  code_locations: Array<{
+    file: string;
+    line: number;
+    column?: number;
+    code_snippet: string;
+  }>;
+  recommendations: string[];
+  references: string[];
+}
+
+export interface SecurityAnalysisResult {
+  risk_score: number;
+  risk_level: 'very_low' | 'low' | 'medium' | 'high' | 'very_high';
+  confidence: number;
+  vulnerabilities: VulnerabilityDetection[];
+  analysis_metadata: {
+    analysis_time_ms: number;
+    slither_enabled: boolean;
+    detectors_used: string[];
+    source_files_analyzed: number;
+    lines_of_code: number;
+  };
+}
+
+export interface ProtocolAssessmentStatus {
+  id: string;
+  protocol_name: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  progress_percentage: number;
+  current_stage: string;
+  estimated_completion_time?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Risk levels with enhanced scoring
+export interface EnhancedRiskLevel extends RiskLevel {
+  technical_score: number;
+  governance_score: number;
+  liquidity_score: number;
+  reputation_score: number;
+  vulnerability_count: number;
+  critical_vulnerabilities: number;
+}

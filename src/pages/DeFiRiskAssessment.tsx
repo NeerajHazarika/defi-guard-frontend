@@ -27,10 +27,10 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  LinearProgress,
 } from '@mui/material';
 import {
   Add,
-  Assessment,
   Security,
   TrendingUp,
   Groups,
@@ -41,139 +41,155 @@ import {
   OpenInNew,
   Shield,
   AccountBalanceWallet,
-  People,
+  Code,
+  BugReport,
+  Speed,
 } from '@mui/icons-material';
 import MetricCard from '../components/MetricCard';
+import { defiRiskAssessmentApi } from '../services/api';
+import type { 
+  Protocol, 
+  Assessment as AssessmentType, 
+  CreateAssessmentRequest, 
+  CreateProtocolRequest,
+  AnalysisProgress,
+  SlitherVulnerabilityType
+} from '../services/api';
 
-// Types
-interface Protocol {
-  id: string;
-  name: string;
-  contractAddresses: string[];
-  blockchain: string;
-  tokenSymbol?: string;
-  website?: string;
-  documentation?: string;
-  category?: string;
-  tags?: string[];
-  createdAt: string;
-  updatedAt: string;
+// Additional local interfaces for UI state
+interface AssessmentStats {
+  totalProtocols: number;
+  activeAssessments: number;
+  completedAssessments: number;
+  avgRiskScore: number;
+  criticalFindings: number;
 }
 
-interface Finding {
-  id: string;
-  category: 'TECHNICAL' | 'GOVERNANCE' | 'LIQUIDITY' | 'REPUTATION' | 'OPERATIONAL';
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
-  title: string;
-  description: string;
-  source: string;
-  confidence: number;
-  recommendation?: string;
-}
-
-interface Assessment {
-  id: string;
+interface CreateAssessmentForm {
   protocolId: string;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
-  overallScore: number;
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  categoryScores: {
-    technical: number;
-    governance: number;
-    liquidity: number;
-    reputation: number;
-  };
-  recommendations: string[];
-  metadata: {
-    analysisVersion: string;
-    analysisDepth: string;
-    executionTime: number;
-    dataSourcesUsed: string[];
-    warnings?: string[];
-  };
-  findings: Finding[];
-  createdAt: string;
-  updatedAt: string;
-  completedAt?: string;
+  contractAddress: string;
+  chainId: number;
+  analysisTypes: string[];
+  includeStaticAnalysis: boolean;
+  includeDynamicAnalysis: boolean;
+  includeGovernanceAnalysis: boolean;
+  includeLiquidityAnalysis: boolean;
 }
 
-const BLOCKCHAIN_OPTIONS = ['ethereum', 'bsc', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'fantom'];
+const BLOCKCHAIN_OPTIONS = [
+  { value: 1, label: 'Ethereum' },
+  { value: 56, label: 'BSC' },
+  { value: 137, label: 'Polygon' },
+  { value: 42161, label: 'Arbitrum' },
+  { value: 10, label: 'Optimism' },
+  { value: 43114, label: 'Avalanche' },
+  { value: 250, label: 'Fantom' }
+];
+
 const CATEGORY_OPTIONS = ['DEX', 'LENDING', 'YIELD_FARMING', 'DERIVATIVES', 'INSURANCE', 'BRIDGE', 'DAO', 'STABLECOIN', 'NFT', 'OTHER'];
-const ANALYSIS_DEPTH_OPTIONS = ['BASIC', 'STANDARD', 'COMPREHENSIVE'];
 
 const DeFiRiskAssessment: React.FC = () => {
   // State management
   const [protocols, setProtocols] = useState<Protocol[]>([]);
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [assessments, setAssessments] = useState<AssessmentType[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<AssessmentStats>({
+    totalProtocols: 0,
+    activeAssessments: 0,
+    completedAssessments: 0,
+    avgRiskScore: 0,
+    criticalFindings: 0
+  });
+  const [availableDetectors, setAvailableDetectors] = useState<SlitherVulnerabilityType[]>([]);
 
   // Dialog states
   const [addProtocolOpen, setAddProtocolOpen] = useState(false);
   const [createAssessmentOpen, setCreateAssessmentOpen] = useState(false);
-  const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
+  const [selectedAssessment, setSelectedAssessment] = useState<AssessmentType | null>(null);
+  const [assessmentProgress, setAssessmentProgress] = useState<AnalysisProgress | null>(null);
 
   // Form states
-  const [newProtocol, setNewProtocol] = useState({
+  const [newProtocol, setNewProtocol] = useState<CreateProtocolRequest>({
     name: '',
-    contractAddresses: '',
-    blockchain: 'ethereum',
-    tokenSymbol: '',
+    contractAddress: '',
+    chainId: 1,
     website: '',
-    category: 'DEX',
-    tags: ''
+    category: 'DEX'
   });
 
-  const [assessmentForm, setAssessmentForm] = useState({
+  const [assessmentForm, setAssessmentForm] = useState<CreateAssessmentForm>({
     protocolId: '',
-    analysisDepth: 'STANDARD' as 'BASIC' | 'STANDARD' | 'COMPREHENSIVE'
+    contractAddress: '',
+    chainId: 1,
+    analysisTypes: ['static'],
+    includeStaticAnalysis: true,
+    includeDynamicAnalysis: false,
+    includeGovernanceAnalysis: false,
+    includeLiquidityAnalysis: false
   });
-
-  // API base URL - using proxy to avoid CORS issues
-  // API base URL - using proxy path for Docker deployment
-  const API_BASE = '/defi-api/api/v1';
 
   // Fetch data functions
   const fetchProtocols = async () => {
     try {
-      const response = await fetch(`${API_BASE}/protocols`);
-      
-      const data = await response.json();
-      
-      if (data.success && data.data && data.data.protocols) {
-        setProtocols(data.data.protocols);
-      } else {
-        console.error('Invalid protocols response structure:', data);
-        setError('Invalid response structure from protocols API');
-      }
+      const response = await defiRiskAssessmentApi.getProtocols(1, 50);
+      setProtocols(Array.isArray(response.protocols) ? response.protocols : []);
     } catch (err) {
       console.error('Failed to fetch protocols:', err);
       setError(`Failed to fetch protocols: ${err instanceof Error ? err.message : String(err)}`);
+      setProtocols([]); // Set empty array as fallback
     }
   };
 
   const fetchAssessments = async () => {
     try {
-      const response = await fetch(`${API_BASE}/assessments`);
-      const data = await response.json();
-      if (data.success) {
-        setAssessments(data.data.assessments);
-      }
+      const response = await defiRiskAssessmentApi.getAssessments(1, 50);
+      const assessmentsList = Array.isArray(response.assessments) ? response.assessments : [];
+      setAssessments(assessmentsList);
+      
+      // Update stats based on assessments
+      const activeCount = assessmentsList.filter(a => a.status === 'IN_PROGRESS' || a.status === 'PENDING').length;
+      const completedCount = assessmentsList.filter(a => a.status === 'COMPLETED').length;
+      const avgScore = completedCount > 0 
+        ? assessmentsList.filter(a => a.status === 'COMPLETED').reduce((sum, a) => sum + a.overallScore, 0) / completedCount 
+        : 0;
+      const criticalCount = assessmentsList.reduce((sum, a) => 
+        sum + (a.findings?.filter(f => f.severity === 'critical').length || 0), 0);
+
+      setStats(prev => ({
+        ...prev,
+        activeAssessments: activeCount,
+        completedAssessments: completedCount,
+        avgRiskScore: avgScore,
+        criticalFindings: criticalCount
+      }));
     } catch (err) {
       console.error('Failed to fetch assessments:', err);
       setError('Failed to fetch assessments');
+      setAssessments([]); // Set empty array as fallback
     }
   };
 
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${API_BASE}/protocols/stats`);
-      const data = await response.json();
-      if (data.success) {
-        // Stats fetched successfully but not stored in state for this version
-      }
+      const [protocolsResponse, detectorsResponse] = await Promise.all([
+        defiRiskAssessmentApi.getProtocols(1, 1), // Just to get total count
+        defiRiskAssessmentApi.getSlitherDetectors().catch(err => {
+          console.warn('Failed to fetch Slither detectors:', err);
+          return []; // Return empty array as fallback
+        })
+      ]);
+      
+      setStats(prev => ({
+        ...prev,
+        totalProtocols: protocolsResponse.total
+      }));
+      
+      setAvailableDetectors(Array.isArray(detectorsResponse) ? detectorsResponse : []);
     } catch (err) {
       console.error('Failed to fetch stats:', err);
+      // Set fallback values
+      setAvailableDetectors([]);
     }
   };
 
@@ -189,61 +205,20 @@ const DeFiRiskAssessment: React.FC = () => {
   const handleCreateProtocol = async () => {
     try {
       setLoading(true);
-      const contractAddresses = newProtocol.contractAddresses
-        .split(',')
-        .map(addr => addr.trim())
-        .filter(addr => addr.length > 0);
       
-      const tags = newProtocol.tags
-        .split(',')
-        .map(tag => tag.trim())
-        .filter(tag => tag.length > 0);
-
-      const protocolData = {
-        name: newProtocol.name,
-        contractAddresses,
-        blockchain: newProtocol.blockchain,
-        tokenSymbol: newProtocol.tokenSymbol || undefined,
-        website: newProtocol.website || undefined,
-        category: newProtocol.category,
-        tags: tags.length > 0 ? tags : undefined
-      };
-
-      const response = await fetch(`${API_BASE}/protocols`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(protocolData),
+      await defiRiskAssessmentApi.createProtocol(newProtocol);
+      
+      setAddProtocolOpen(false);
+      setNewProtocol({
+        name: '',
+        contractAddress: '',
+        chainId: 1,
+        website: '',
+        category: 'DEX'
       });
-
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        setAddProtocolOpen(false);
-        setNewProtocol({
-          name: '',
-          contractAddresses: '',
-          blockchain: 'ethereum',
-          tokenSymbol: '',
-          website: '',
-          category: 'DEX',
-          tags: ''
-        });
-        await fetchProtocols();
-        await fetchStats();
-        setError(null); // Clear any previous errors
-      } else {
-        const errorMessage = data.message || `HTTP ${response.status}: Failed to create protocol`;
-        console.error('API Error:', errorMessage, data);
-        
-        // Provide user-friendly error messages
-        if (errorMessage.includes('already exists')) {
-          setError(`Protocol "${newProtocol.name}" already exists. Try using a different name or check the existing protocols list.`);
-        } else {
-          setError(errorMessage);
-        }
-      }
+      await fetchProtocols();
+      await fetchStats();
+      setError(null);
     } catch (err) {
       console.error('Failed to create protocol:', err);
       setError('Failed to create protocol');
@@ -256,27 +231,31 @@ const DeFiRiskAssessment: React.FC = () => {
   const handleCreateAssessment = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/assessments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(assessmentForm),
-      });
 
-      const data = await response.json();
-      if (data.success) {
-        setCreateAssessmentOpen(false);
-        setAssessmentForm({
-          protocolId: '',
-          analysisDepth: 'STANDARD'
-        });
-        await fetchAssessments();
-        // Poll for assessment completion
-        pollAssessmentStatus(data.data.assessmentId);
-      } else {
-        setError(data.message || 'Failed to create assessment');
-      }
+      const requestData: CreateAssessmentRequest = {
+        protocolId: assessmentForm.protocolId,
+        // Note: Currently the API only accepts protocolId
+        // Other fields are not supported by the backend
+      };
+
+      const assessment = await defiRiskAssessmentApi.createAssessment(requestData);
+      
+      setCreateAssessmentOpen(false);
+      setAssessmentForm({
+        protocolId: '',
+        contractAddress: '',
+        chainId: 1,
+        analysisTypes: ['static'],
+        includeStaticAnalysis: true,
+        includeDynamicAnalysis: false,
+        includeGovernanceAnalysis: false,
+        includeLiquidityAnalysis: false
+      });
+      
+      await fetchAssessments();
+      // Start polling for progress updates
+      pollAssessmentStatus(assessment.id);
+      
     } catch (err) {
       console.error('Failed to create assessment:', err);
       setError('Failed to create assessment');
@@ -285,24 +264,28 @@ const DeFiRiskAssessment: React.FC = () => {
     }
   };
 
-  // Poll assessment status
+  // Poll assessment status and progress
   const pollAssessmentStatus = async (assessmentId: string) => {
     const checkStatus = async () => {
       try {
-        const response = await fetch(`${API_BASE}/assessments/${assessmentId}/status`);
-        const data = await response.json();
+        const [assessment, progress] = await Promise.all([
+          defiRiskAssessmentApi.getAssessment(assessmentId),
+          defiRiskAssessmentApi.getAssessmentProgress(assessmentId)
+        ]);
         
-        if (data.success) {
-          const status = data.data.status;
-          if (status === 'COMPLETED' || status === 'FAILED') {
-            await fetchAssessments();
-            return;
-          }
-          // Continue polling if still in progress
-          setTimeout(checkStatus, 3000);
+        setAssessmentProgress(progress);
+        
+        if (assessment.status === 'COMPLETED' || assessment.status === 'FAILED') {
+          await fetchAssessments();
+          setAssessmentProgress(null);
+          return;
         }
+        
+        // Continue polling if still in progress
+        setTimeout(checkStatus, 3000);
       } catch (err) {
         console.error('Failed to check assessment status:', err);
+        setAssessmentProgress(null);
       }
     };
 
@@ -311,22 +294,21 @@ const DeFiRiskAssessment: React.FC = () => {
 
   // Helper functions
   const getRiskLevelColor = (level: string) => {
-    switch (level) {
-      case 'LOW': return 'success';
-      case 'MEDIUM': return 'warning';
-      case 'HIGH': return 'error';
-      case 'CRITICAL': return 'error';
+    switch (level.toLowerCase()) {
+      case 'very_low': case 'low': return 'success';
+      case 'medium': return 'warning';
+      case 'high': case 'very_high': return 'error';
       default: return 'default';
     }
   };
 
   const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'CRITICAL': return 'error';
-      case 'HIGH': return 'error';
-      case 'MEDIUM': return 'warning';
-      case 'LOW': return 'info';
-      case 'INFO': return 'default';
+    switch (severity.toLowerCase()) {
+      case 'critical': return 'error';
+      case 'high': return 'error';
+      case 'medium': return 'warning';
+      case 'low': return 'info';
+      case 'info': return 'default';
       default: return 'default';
     }
   };
@@ -336,15 +318,14 @@ const DeFiRiskAssessment: React.FC = () => {
     return protocol?.name || protocolId;
   };
 
-  // Calculate metrics
+  // Calculate metrics from state
   const metrics = {
-    totalProtocols: protocols.length,
+    totalProtocols: stats.totalProtocols,
     totalAssessments: assessments.length,
-    completedAssessments: assessments.filter(a => a.status === 'COMPLETED').length,
+    completedAssessments: stats.completedAssessments,
     highRiskProtocols: assessments.filter(a => a.riskLevel === 'HIGH' || a.riskLevel === 'CRITICAL').length,
-    averageRiskScore: assessments.length > 0 
-      ? Math.round(assessments.reduce((sum, a) => sum + a.overallScore, 0) / assessments.length)
-      : 0
+    averageRiskScore: Math.round(stats.avgRiskScore),
+    criticalFindings: stats.criticalFindings
   };
 
   return (
@@ -359,9 +340,32 @@ const DeFiRiskAssessment: React.FC = () => {
         </Alert>
       )}
 
+      {/* Analysis Progress */}
+      {assessmentProgress && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Analysis in Progress</Typography>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              {assessmentProgress.current_step} - Stage: {assessmentProgress.stage}
+            </Typography>
+            <LinearProgress 
+              variant="determinate" 
+              value={assessmentProgress.progress_percentage} 
+              sx={{ mb: 1 }}
+            />
+            <Typography variant="body2" color="text.secondary">
+              {assessmentProgress.progress_percentage}% complete
+              {assessmentProgress.estimated_time_remaining_ms && 
+                ` - ${Math.round(assessmentProgress.estimated_time_remaining_ms / 1000)}s remaining`
+              }
+            </Typography>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Key Metrics */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2}>
           <MetricCard
             title="Total Protocols"
             value={metrics.totalProtocols}
@@ -370,16 +374,52 @@ const DeFiRiskAssessment: React.FC = () => {
             color="primary.main"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2}>
           <MetricCard
             title="Risk Assessments"
             value={metrics.completedAssessments}
             subtitle={`${metrics.totalAssessments} total`}
-            icon={<Assessment />}
+            icon={<Security />}
             color="info.main"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Critical Findings"
+            value={metrics.criticalFindings}
+            subtitle="Security issues found"
+            icon={<BugReport />}
+            color="error.main"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Active Assessments"
+            value={stats.activeAssessments}
+            subtitle="Currently running"
+            icon={<Speed />}
+            color="warning.main"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Avg Risk Score"
+            value={metrics.averageRiskScore}
+            subtitle="Out of 100"
+            icon={<TrendingUp />}
+            color="secondary.main"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <MetricCard
+            title="Slither Detectors"
+            value={availableDetectors.length}
+            subtitle="Available"
+            icon={<Code />}
+            color="success.main"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
           <MetricCard
             title="High Risk Protocols"
             value={metrics.highRiskProtocols}
@@ -389,7 +429,7 @@ const DeFiRiskAssessment: React.FC = () => {
             riskLevel={metrics.highRiskProtocols > 5 ? "HIGH" : metrics.highRiskProtocols > 2 ? "MEDIUM" : "LOW"}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2}>
           <MetricCard
             title="Average Risk Score"
             value={metrics.averageRiskScore}
@@ -468,7 +508,9 @@ const DeFiRiskAssessment: React.FC = () => {
                               <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
                                 {protocol.name}
                               </Typography>
-                              <Chip label={protocol.blockchain} size="small" />
+                              {protocol.chainId && (
+                                <Chip label={`Chain ${protocol.chainId}`} size="small" />
+                              )}
                               {protocol.category && (
                                 <Chip label={protocol.category} size="small" variant="outlined" />
                               )}
@@ -477,10 +519,7 @@ const DeFiRiskAssessment: React.FC = () => {
                           secondary={
                             <Box>
                               <Typography variant="body2" color="text.secondary">
-                                {protocol.contractAddresses[0]}
-                                {protocol.contractAddresses.length > 1 && 
-                                  ` (+${protocol.contractAddresses.length - 1} more)`
-                                }
+                                {protocol.contractAddress}
                               </Typography>
                               {protocol.website && (
                                 <Typography variant="caption" color="primary">
@@ -545,7 +584,7 @@ const DeFiRiskAssessment: React.FC = () => {
                               <Chip
                                 label={assessment.status}
                                 size="small"
-                                color={assessment.status === 'COMPLETED' ? 'success' : 
+                                color={assessment.status === 'COMPLETED' ? 'success' :
                                        assessment.status === 'FAILED' ? 'error' : 'warning'}
                               />
                               {assessment.status === 'COMPLETED' && (
@@ -561,7 +600,7 @@ const DeFiRiskAssessment: React.FC = () => {
                             <Box>
                               {assessment.status === 'COMPLETED' && (
                                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                  Overall Score: {assessment.overallScore}/100
+                                  Score: {assessment.overallScore}/100
                                 </Typography>
                               )}
                               <Typography variant="caption" color="text.secondary">
@@ -606,25 +645,24 @@ const DeFiRiskAssessment: React.FC = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Contract Addresses"
-                value={newProtocol.contractAddresses}
-                onChange={(e) => setNewProtocol(prev => ({ ...prev, contractAddresses: e.target.value }))}
-                placeholder="0x1234..., 0x5678... (comma separated)"
-                helperText="Enter one or more contract addresses separated by commas"
-                required
+                label="Contract Address"
+                value={newProtocol.contractAddress}
+                onChange={(e) => setNewProtocol(prev => ({ ...prev, contractAddress: e.target.value }))}
+                placeholder="0x1234567890abcdef..."
+                helperText="Main contract address for the protocol"
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Blockchain</InputLabel>
                 <Select
-                  value={newProtocol.blockchain}
+                  value={newProtocol.chainId}
                   label="Blockchain"
-                  onChange={(e) => setNewProtocol(prev => ({ ...prev, blockchain: e.target.value }))}
+                  onChange={(e) => setNewProtocol(prev => ({ ...prev, chainId: e.target.value as number }))}
                 >
                   {BLOCKCHAIN_OPTIONS.map(blockchain => (
-                    <MenuItem key={blockchain} value={blockchain}>
-                      {blockchain.charAt(0).toUpperCase() + blockchain.slice(1)}
+                    <MenuItem key={blockchain.value} value={blockchain.value}>
+                      {blockchain.label}
                     </MenuItem>
                   ))}
                 </Select>
@@ -646,16 +684,7 @@ const DeFiRiskAssessment: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Token Symbol"
-                value={newProtocol.tokenSymbol}
-                onChange={(e) => setNewProtocol(prev => ({ ...prev, tokenSymbol: e.target.value }))}
-                placeholder="UNI, SUSHI, etc."
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Website"
@@ -667,11 +696,12 @@ const DeFiRiskAssessment: React.FC = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Tags"
-                value={newProtocol.tags}
-                onChange={(e) => setNewProtocol(prev => ({ ...prev, tags: e.target.value }))}
-                placeholder="defi, dex, amm (comma separated)"
-                helperText="Add relevant tags separated by commas"
+                label="Description"
+                value={newProtocol.description || ''}
+                onChange={(e) => setNewProtocol(prev => ({ ...prev, description: e.target.value }))}
+                multiline
+                rows={3}
+                placeholder="Brief description of the protocol"
               />
             </Grid>
           </Grid>
@@ -681,7 +711,7 @@ const DeFiRiskAssessment: React.FC = () => {
           <Button 
             onClick={handleCreateProtocol} 
             variant="contained"
-            disabled={!newProtocol.name || !newProtocol.contractAddresses || loading}
+            disabled={!newProtocol.name || loading}
           >
             {loading ? <CircularProgress size={20} /> : 'Add Protocol'}
           </Button>
@@ -689,12 +719,12 @@ const DeFiRiskAssessment: React.FC = () => {
       </Dialog>
 
       {/* Create Assessment Dialog */}
-      <Dialog open={createAssessmentOpen} onClose={() => setCreateAssessmentOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={createAssessmentOpen} onClose={() => setCreateAssessmentOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Run Risk Assessment</DialogTitle>
         <DialogContent>
           <Grid container spacing={3} sx={{ mt: 1 }}>
             <Grid item xs={12}>
-              <FormControl fullWidth>
+              <FormControl fullWidth required>
                 <InputLabel>Select Protocol</InputLabel>
                 <Select
                   value={assessmentForm.protocolId}
@@ -703,27 +733,157 @@ const DeFiRiskAssessment: React.FC = () => {
                 >
                   {protocols.map(protocol => (
                     <MenuItem key={protocol.id} value={protocol.id}>
-                      {protocol.name} ({protocol.blockchain})
+                      {protocol.name} (Chain ID: {protocol.chainId})
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12}>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Contract Address (Optional)"
+                value={assessmentForm.contractAddress}
+                onChange={(e) => setAssessmentForm(prev => ({ ...prev, contractAddress: e.target.value }))}
+                placeholder="0x1234567890abcdef..."
+                helperText="Override protocol contract address"
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
-                <InputLabel>Analysis Depth</InputLabel>
+                <InputLabel>Blockchain</InputLabel>
                 <Select
-                  value={assessmentForm.analysisDepth}
-                  label="Analysis Depth"
-                  onChange={(e) => setAssessmentForm(prev => ({ ...prev, analysisDepth: e.target.value as any }))}
+                  value={assessmentForm.chainId}
+                  label="Blockchain"
+                  onChange={(e) => setAssessmentForm(prev => ({ ...prev, chainId: e.target.value as number }))}
                 >
-                  {ANALYSIS_DEPTH_OPTIONS.map(depth => (
-                    <MenuItem key={depth} value={depth}>
-                      {depth} {depth === 'COMPREHENSIVE' ? '(~3 min)' : depth === 'STANDARD' ? '(~2 min)' : '(~1 min)'}
+                  {BLOCKCHAIN_OPTIONS.map(blockchain => (
+                    <MenuItem key={blockchain.value} value={blockchain.value}>
+                      {blockchain.label}
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" gutterBottom>
+                Analysis Types (Select at least one)
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Card variant="outlined" sx={{ p: 2 }}>
+                    <FormControl component="fieldset" variant="standard">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Code color="primary" />
+                        <Typography variant="h6">Static Analysis</Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        Slither-powered smart contract vulnerability detection
+                      </Typography>
+                      <Box>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={assessmentForm.includeStaticAnalysis}
+                            onChange={(e) => setAssessmentForm(prev => ({ 
+                              ...prev, 
+                              includeStaticAnalysis: e.target.checked 
+                            }))}
+                          />
+                          <span style={{ marginLeft: 8 }}>
+                            Enable Static Analysis ({availableDetectors.length} detectors)
+                          </span>
+                        </label>
+                      </Box>
+                    </FormControl>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <Card variant="outlined" sx={{ p: 2 }}>
+                    <FormControl component="fieldset" variant="standard">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Speed color="warning" />
+                        <Typography variant="h6">Dynamic Analysis</Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        Runtime behavior and transaction analysis
+                      </Typography>
+                      <Box>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={assessmentForm.includeDynamicAnalysis}
+                            onChange={(e) => setAssessmentForm(prev => ({ 
+                              ...prev, 
+                              includeDynamicAnalysis: e.target.checked 
+                            }))}
+                          />
+                          <span style={{ marginLeft: 8 }}>Enable Dynamic Analysis</span>
+                        </label>
+                      </Box>
+                    </FormControl>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <Card variant="outlined" sx={{ p: 2 }}>
+                    <FormControl component="fieldset" variant="standard">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Groups color="info" />
+                        <Typography variant="h6">Governance Analysis</Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        Decentralization and governance structure
+                      </Typography>
+                      <Box>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={assessmentForm.includeGovernanceAnalysis}
+                            onChange={(e) => setAssessmentForm(prev => ({ 
+                              ...prev, 
+                              includeGovernanceAnalysis: e.target.checked 
+                            }))}
+                          />
+                          <span style={{ marginLeft: 8 }}>Enable Governance Analysis</span>
+                        </label>
+                      </Box>
+                    </FormControl>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <Card variant="outlined" sx={{ p: 2 }}>
+                    <FormControl component="fieldset" variant="standard">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <AccountBalanceWallet color="success" />
+                        <Typography variant="h6">Liquidity Analysis</Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        TVL, volume, and market depth analysis
+                      </Typography>
+                      <Box>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={assessmentForm.includeLiquidityAnalysis}
+                            onChange={(e) => setAssessmentForm(prev => ({ 
+                              ...prev, 
+                              includeLiquidityAnalysis: e.target.checked 
+                            }))}
+                          />
+                          <span style={{ marginLeft: 8 }}>Enable Liquidity Analysis</span>
+                        </label>
+                      </Box>
+                    </FormControl>
+                  </Card>
+                </Grid>
+              </Grid>
             </Grid>
           </Grid>
         </DialogContent>
@@ -732,7 +892,14 @@ const DeFiRiskAssessment: React.FC = () => {
           <Button 
             onClick={handleCreateAssessment} 
             variant="contained"
-            disabled={!assessmentForm.protocolId || loading}
+            disabled={
+              !assessmentForm.protocolId || 
+              loading ||
+              (!assessmentForm.includeStaticAnalysis && 
+               !assessmentForm.includeDynamicAnalysis && 
+               !assessmentForm.includeGovernanceAnalysis && 
+               !assessmentForm.includeLiquidityAnalysis)
+            }
           >
             {loading ? <CircularProgress size={20} /> : 'Start Assessment'}
           </Button>
@@ -763,52 +930,25 @@ const DeFiRiskAssessment: React.FC = () => {
             </Box>
           </DialogTitle>
           <DialogContent>
-            {/* Category Scores */}
-            <Grid container spacing={3} sx={{ mb: 3 }}>
-              <Grid item xs={6} sm={3}>
-                <MetricCard
-                  title="Technical Security"
-                  value={selectedAssessment.categoryScores.technical}
-                  subtitle="Smart contract security"
-                  icon={<Shield />}
-                  color="primary.main"
-                />
-              </Grid>
-              <Grid item xs={6} sm={3}>
-                <MetricCard
-                  title="Governance"
-                  value={selectedAssessment.categoryScores.governance}
-                  subtitle="Decentralization & voting"
-                  icon={<People />}
-                  color="secondary.main"
-                />
-              </Grid>
-              <Grid item xs={6} sm={3}>
-                <MetricCard
-                  title="Liquidity"
-                  value={selectedAssessment.categoryScores.liquidity}
-                  subtitle="Market depth & volume"
-                  icon={<AccountBalanceWallet />}
-                  color="info.main"
-                />
-              </Grid>
-              <Grid item xs={6} sm={3}>
-                <MetricCard
-                  title="Reputation"
-                  value={selectedAssessment.categoryScores.reputation}
-                  subtitle="Team & track record"
-                  icon={<Groups />}
-                  color="warning.main"
-                />
-              </Grid>
-            </Grid>
+            {/* Risk Score Summary */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>Risk Assessment Summary</Typography>
+              <MetricCard
+                title="Risk Score"
+                value={selectedAssessment.overallScore}
+                subtitle={`Risk Level: ${selectedAssessment.riskLevel}`}
+                icon={<Shield />}
+                color="primary.main"
+                riskLevel={selectedAssessment.riskLevel.toUpperCase() as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'}
+              />
+            </Box>
 
             {/* Recommendations */}
-            {selectedAssessment.recommendations.length > 0 && (
+            {selectedAssessment.recommendations && selectedAssessment.recommendations.length > 0 && (
               <Box sx={{ mb: 3 }}>
                 <Typography variant="h6" sx={{ mb: 2 }}>Recommendations</Typography>
                 <List>
-                  {selectedAssessment.recommendations.map((rec, index) => (
+                  {selectedAssessment.recommendations.map((rec: string, index: number) => (
                     <ListItem key={index}>
                       <ListItemText primary={rec} />
                     </ListItem>
@@ -818,12 +958,11 @@ const DeFiRiskAssessment: React.FC = () => {
             )}
 
             {/* Findings */}
-            {selectedAssessment.findings.length > 0 && (
+            {selectedAssessment.findings && selectedAssessment.findings.length > 0 && (
               <Box sx={{ mb: 3 }}>
                 <Typography variant="h6" sx={{ mb: 2 }}>Security Findings</Typography>
-                {/* Deduplicate findings by ID to avoid rendering duplicates */}
-                {Array.from(new Map(selectedAssessment.findings.map(finding => [finding.id, finding])).values()).map((finding, index) => (
-                  <Accordion key={`${selectedAssessment.id}-${finding.id}-${index}`}>
+                {selectedAssessment.findings.map((finding: any, index: number) => (
+                  <Accordion key={`${selectedAssessment.id}-${index}`}>
                     <AccordionSummary expandIcon={<ExpandMore />}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
                         <Chip
@@ -832,13 +971,6 @@ const DeFiRiskAssessment: React.FC = () => {
                           color={getSeverityColor(finding.severity) as any}
                         />
                         <Typography sx={{ fontWeight: 500 }}>{finding.title}</Typography>
-                        <Box sx={{ ml: 'auto' }}>
-                          <Chip
-                            label={`${finding.confidence}% confidence`}
-                            size="small"
-                            variant="outlined"
-                          />
-                        </Box>
                       </Box>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -851,7 +983,7 @@ const DeFiRiskAssessment: React.FC = () => {
                         </Alert>
                       )}
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                        Source: {finding.source} | Category: {finding.category}
+                        Category: {finding.category}
                       </Typography>
                     </AccordionDetails>
                   </Accordion>
@@ -865,22 +997,22 @@ const DeFiRiskAssessment: React.FC = () => {
               <Grid container spacing={2}>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">
-                    Analysis Version: {selectedAssessment.metadata.analysisVersion}
+                    Analysis Version: {selectedAssessment.metadata?.analysisVersion || 'N/A'}
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">
-                    Analysis Depth: {selectedAssessment.metadata.analysisDepth}
+                    Status: {selectedAssessment.status}
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">
-                    Execution Time: {Math.round(selectedAssessment.metadata.executionTime / 1000)}s
+                    Risk Level: {selectedAssessment.riskLevel}
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">
-                    Data Sources: {selectedAssessment.metadata.dataSourcesUsed.join(', ')}
+                    Risk Level: {selectedAssessment.riskLevel}
                   </Typography>
                 </Grid>
                 <Grid item xs={12}>

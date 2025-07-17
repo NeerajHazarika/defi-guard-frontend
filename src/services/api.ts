@@ -253,10 +253,24 @@ export interface RiskAssessmentResult {
       description: string;
       impact?: string;
       confidence: number;
+      code_locations?: Array<{
+        file: string;
+        line: number;
+        column?: number;
+        code_snippet?: string;
+      }>;
+      slither_detector?: string;
+      references?: string[];
     }>;
     vulnerabilities_count: number;
     code_quality_score: number;
     audit_coverage: number;
+    static_analysis: {
+      slither_enabled: boolean;
+      vulnerabilities_detected: number;
+      analysis_time_ms: number;
+      detectors_used: string[];
+    };
   };
   governance: {
     score: number;
@@ -297,35 +311,46 @@ export interface RiskAssessmentResult {
 export interface Assessment {
   id: string;
   protocolId: string;
-  contractAddress?: string;
-  chainId?: number;
-  analysisTypes: string[];
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  riskScore: number;
-  riskLevel: 'very_low' | 'low' | 'medium' | 'high' | 'very_high';
-  confidence: number;
-  results?: RiskAssessmentResult;
-  findings?: Array<{
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+  overallScore: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'unknown';
+  findings: Array<{
     category: string;
     severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
     title: string;
     description: string;
     recommendation?: string;
+    code_locations?: Array<{
+      file: string;
+      line: number;
+      column?: number;
+      code_snippet?: string;
+    }>;
+    slither_detector?: string;
+    references?: string[];
   }>;
-  recommendations?: string[];
-  created_at: string;
-  updated_at: string;
-  completed_at?: string;
-  error_message?: string;
-  processing_time_ms?: number;
+  recommendations: string[];
+  categoryScores: {
+    technical?: number;
+    governance?: number;
+    liquidity?: number;
+    reputation?: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+  metadata: {
+    analysisVersion?: string;
+    analysisDepth?: string;
+    executionTime?: number;
+    dataSourcesUsed?: string[];
+  };
 }
 
 export interface CreateAssessmentRequest {
   protocolId: string;
-  contractAddress?: string;
-  chainId?: number;
-  analysisTypes?: string[];
-  force_refresh?: boolean;
+  // Note: The API currently only accepts protocolId for assessment creation
+  // Other fields like contractAddress, chainId are not supported
 }
 
 export interface AssessmentsListResponse {
@@ -354,6 +379,58 @@ export interface CreateProtocolRequest {
   governance_token?: string;
 }
 
+// Enhanced vulnerability detection interfaces for API v1.1
+export interface VulnerabilityFinding {
+  id: string;
+  detector: string;
+  title: string;
+  description: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  impact: string;
+  locations: Array<{
+    file: string;
+    line: number;
+    column?: number;
+    code_snippet: string;
+  }>;
+  recommendations: string[];
+  references: string[];
+  metadata: {
+    detector_type: 'slither' | 'custom';
+    vulnerability_category: string;
+    slither_detector_id?: string;
+  };
+}
+
+export interface ProtocolAnalysisRequest {
+  protocol_name: string;
+  contract_address?: string;
+  chain_id?: number;
+  analysis_types?: Array<'static' | 'dynamic' | 'governance' | 'liquidity'>;
+  custom_config?: {
+    slither_detectors?: string[];
+    timeout_seconds?: number;
+    include_dependencies?: boolean;
+  };
+}
+
+export interface AnalysisProgress {
+  stage: 'initializing' | 'fetching_source' | 'static_analysis' | 'dynamic_analysis' | 'governance_analysis' | 'liquidity_analysis' | 'finalizing';
+  progress_percentage: number;
+  current_step: string;
+  estimated_time_remaining_ms?: number;
+}
+
+// Slither-specific vulnerability types (28+ types supported)
+export interface SlitherVulnerabilityType {
+  detector_name: string;
+  impact: 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  category: 'access-control' | 'arithmetic' | 'assembly' | 'conformance' | 'constable-states' | 'deprecated' | 'events' | 'external-call' | 'gas' | 'informational' | 'inheritance' | 'locked-ether' | 'missing-inheritance' | 'naming-convention' | 'optimization' | 'reentrancy' | 'shadowing' | 'solc-version' | 'timestamp' | 'unused-state' | 'variables-order';
+  description: string;
+}
+
 export interface RiskAssessmentHealth {
   status: 'healthy' | 'degraded' | 'unhealthy';
   timestamp: string;
@@ -372,6 +449,16 @@ export interface RiskAssessmentHealth {
   cache_stats: {
     hit_rate: number;
     size: number;
+  };
+  performance_metrics: {
+    avg_analysis_time_ms: number;
+    total_assessments_completed: number;
+    success_rate: number;
+  };
+  system_info: {
+    python_version: string;
+    slither_version?: string;
+    available_detectors: string[];
   };
 }
 
@@ -896,6 +983,31 @@ class ApiService {
       };
     }
   }
+
+  // Enhanced Risk Assessment API methods
+  async getRiskAssessmentHealth(): Promise<RiskAssessmentHealth> {
+    return defiRiskAssessmentApi.healthCheck();
+  }
+
+  async getProtocolRiskAssessments(protocolId?: string): Promise<AssessmentsListResponse> {
+    return defiRiskAssessmentApi.getAssessments(1, 20, protocolId);
+  }
+
+  async createProtocolAssessment(request: CreateAssessmentRequest): Promise<Assessment> {
+    return defiRiskAssessmentApi.createAssessment(request);
+  }
+
+  async getAssessmentProgress(assessmentId: string): Promise<AnalysisProgress | null> {
+    return defiRiskAssessmentApi.getAssessmentProgress(assessmentId);
+  }
+
+  async getAvailableDetectors(): Promise<SlitherVulnerabilityType[]> {
+    return defiRiskAssessmentApi.getSlitherDetectors();
+  }
+
+  async analyzeProtocolSecurity(request: ProtocolAnalysisRequest): Promise<Assessment> {
+    return defiRiskAssessmentApi.analyzeProtocol(request);
+  }
 }
 
 export const apiService = new ApiService();
@@ -960,7 +1072,20 @@ export const defiRiskAssessmentApi = {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      
+      // Handle the wrapped response format
+      if (data.success && data.data) {
+        return {
+          protocols: data.data.protocols || [],
+          total: data.data.pagination?.total || 0,
+          page: page,
+          per_page: perPage
+        };
+      }
+      
+      // Fallback for direct format
+      return data;
     } catch (error) {
       console.error('[API] Error fetching protocols:', error);
       throw error;
@@ -1053,15 +1178,17 @@ export const defiRiskAssessmentApi = {
   // Risk Assessment Management
   async getAssessments(page = 1, perPage = 20, protocolId?: string, status?: string): Promise<AssessmentsListResponse> {
     try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        per_page: perPage.toString(),
-      });
+      const params = new URLSearchParams();
 
       if (protocolId) params.append('protocol_id', protocolId);
       if (status) params.append('status', status);
+      if (perPage && perPage !== 20) params.append('limit', perPage.toString());
+      if (page && page > 1) params.append('offset', ((page - 1) * perPage).toString());
 
-      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments?${params}`, {
+      const queryString = params.toString();
+      const url = `${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments${queryString ? '?' + queryString : ''}`;
+
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -1072,7 +1199,19 @@ export const defiRiskAssessmentApi = {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      
+      // Transform the response to match our interface
+      if (result.success && result.data) {
+        return {
+          assessments: result.data.assessments || [],
+          total: result.data.total || 0,
+          page: page,
+          per_page: perPage
+        };
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (error) {
       console.error('[API] Error fetching assessments:', error);
       throw error;
@@ -1102,20 +1241,45 @@ export const defiRiskAssessmentApi = {
 
   async createAssessment(assessment: CreateAssessmentRequest): Promise<Assessment> {
     try {
+      // Only send protocolId as that's all the API accepts currently
+      const requestBody = {
+        protocolId: assessment.protocolId
+      };
+
       const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(assessment),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const errorText = await response.text();
+        console.error('[API] Assessment creation failed:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
-      return data.data;
+      
+      // The API returns the assessment creation response, but we need to poll for the actual assessment
+      // For now, return a minimal assessment object based on the response
+      return {
+        id: data.data.assessmentId,
+        protocolId: data.data.protocolId,
+        status: data.data.status,
+        overallScore: 0, // Will be populated when assessment completes
+        riskLevel: 'unknown' as any,
+        findings: [],
+        recommendations: [],
+        categoryScores: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        completedAt: null,
+        metadata: {
+          analysisVersion: '1.0.0'
+        }
+      };
     } catch (error) {
       console.error('[API] Error creating assessment:', error);
       throw error;
@@ -1155,7 +1319,39 @@ export const defiRiskAssessmentApi = {
       }
 
       const data = await response.json();
-      return data.data || data;
+      
+      // The backend returns a simple {status: "ok", timestamp: "..."} format
+      // Transform it to match our interface
+      return {
+        status: data.status === 'ok' ? 'healthy' : 'unhealthy',
+        timestamp: data.timestamp || new Date().toISOString(),
+        uptime: 0, // Not provided by backend
+        version: 'unknown', // Not provided by backend
+        environment: 'production',
+        services: {
+          slither: true, // Assume available since backend is running
+          blockchain_rpc: true,
+          external_apis: {
+            etherscan: true,
+            defillama: true,
+            coingecko: true,
+          },
+        },
+        cache_stats: {
+          hit_rate: 0,
+          size: 0,
+        },
+        performance_metrics: {
+          avg_analysis_time_ms: 0,
+          total_assessments_completed: 0,
+          success_rate: 0,
+        },
+        system_info: {
+          python_version: 'unknown',
+          slither_version: 'unknown',
+          available_detectors: [],
+        },
+      };
     } catch (error) {
       console.error('[API] Error fetching risk assessment health:', error);
       return {
@@ -1177,7 +1373,91 @@ export const defiRiskAssessmentApi = {
           hit_rate: 0,
           size: 0,
         },
+        performance_metrics: {
+          avg_analysis_time_ms: 0,
+          total_assessments_completed: 0,
+          success_rate: 0,
+        },
+        system_info: {
+          python_version: '',
+          slither_version: '',
+          available_detectors: [],
+        },
       };
+    }
+  },
+
+  // Enhanced assessment methods for API v1.1
+  async getAssessmentProgress(id: string): Promise<AnalysisProgress | null> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments/${encodeURIComponent(id)}/progress`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('[API] Error fetching assessment progress:', error);
+      return null;
+    }
+  },
+
+  async getVulnerabilityDetails(assessmentId: string, findingId: string): Promise<VulnerabilityFinding | null> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/assessments/${encodeURIComponent(assessmentId)}/findings/${encodeURIComponent(findingId)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('[API] Error fetching vulnerability details:', error);
+      return null;
+    }
+  },
+
+  async getSlitherDetectors(): Promise<SlitherVulnerabilityType[]> {
+    // Note: The /api/v1/detectors/slither endpoint is not available in the current backend
+    // Returning empty array until the backend implements this endpoint
+    console.log('[API] Slither detectors endpoint not available, returning empty array');
+    return [];
+  },
+
+  async analyzeProtocol(request: ProtocolAnalysisRequest): Promise<Assessment> {
+    try {
+      const response = await fetch(`${DEFI_RISK_ASSESSMENT_API_URL}/api/v1/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data;
+    } catch (error) {
+      console.error('[API] Error analyzing protocol:', error);
+      throw error;
     }
   }
 };

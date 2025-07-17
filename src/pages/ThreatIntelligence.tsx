@@ -253,14 +253,6 @@ const ThreatIntelligence: React.FC = () => {
         </Alert>
       )}
 
-      {/* Success State */}
-      {!error && sortedThreatIntel.length > 0 && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          <AlertTitle>Threat Intelligence Active</AlertTitle>
-          Connected to threat intelligence service - {sortedThreatIntel.length} threat reports available
-        </Alert>
-      )}
-
       {/* Key Metrics */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={2.4}>
