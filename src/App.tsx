@@ -4,12 +4,12 @@ import { ThemeProvider, CssBaseline, Box } from '@mui/material';
 import { theme } from './theme';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
-import DashboardOverview from './pages/DashboardOverview';
 import ThreatIntelligence from './pages/ThreatIntelligence';
 import AddressScreening from './pages/AddressScreening';
 import DeFiRiskAssessment from './pages/DeFiRiskAssessment';
 import StablecoinMonitoring from './pages/StablecoinMonitoring';
 import ScamAddressChecker from './pages/ScamAddressChecker';
+import GlobalStablecoinMapNew from './pages/GlobalStablecoinMapNew';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
@@ -41,7 +41,11 @@ function App() {
             }}
           >
             <Routes>
-              <Route path="/" element={<DashboardOverview />} />
+              <Route path="/" element={
+                <ErrorBoundary>
+                  <ThreatIntelligence />
+                </ErrorBoundary>
+              } />
               <Route path="/threat-intelligence" element={
                 <ErrorBoundary>
                   <ThreatIntelligence />
@@ -65,6 +69,11 @@ function App() {
               <Route path="/scam-address-checker" element={
                 <ErrorBoundary>
                   <ScamAddressChecker />
+                </ErrorBoundary>
+              } />
+              <Route path="/global-stablecoin-map-new" element={
+                <ErrorBoundary>
+                  <GlobalStablecoinMapNew />
                 </ErrorBoundary>
               } />
             </Routes>

@@ -20,6 +20,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Pagination,
+  Stack,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import {
@@ -55,10 +57,16 @@ const ThreatIntelligence: React.FC = () => {
   const [sortBy, setSortBy] = useState<'date' | 'threat_level' | 'severity' | 'title' | 'source' | 'protocols'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10); // Items per page - now configurable
+
   // Handle sort change
   const handleSortChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as 'date' | 'threat_level' | 'severity' | 'title' | 'source' | 'protocols';
     setSortBy(value);
+    setCurrentPage(1); // Reset to first page when sorting changes
+    
     // Default sort orders for different fields
     if (value === 'date') {
       setSortOrder('desc'); // Newest first
@@ -78,6 +86,7 @@ const ThreatIntelligence: React.FC = () => {
   // Toggle sort order
   const toggleSortOrder = () => {
     setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    setCurrentPage(1); // Reset to first page when sort order changes
   };
 
   // Sorted threat intelligence data
@@ -126,6 +135,32 @@ const ThreatIntelligence: React.FC = () => {
       return sortOrder === 'desc' ? -comparison : comparison;
     });
   }, [threatIntel, sortBy, sortOrder]);
+
+  // Paginated threat intelligence data
+  const paginatedThreatIntel = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedThreatIntel.slice(startIndex, endIndex);
+  }, [sortedThreatIntel, currentPage, itemsPerPage]);
+
+  // Calculate total pages
+  const totalPages = Math.ceil(sortedThreatIntel.length / itemsPerPage);
+
+  // Handle page change
+  const handlePageChange = (_event: React.ChangeEvent<unknown>, page: number) => {
+    setCurrentPage(page);
+    // Scroll to top of threats list when changing page
+    const threatsSection = document.getElementById('threats-list');
+    if (threatsSection) {
+      threatsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Handle items per page change
+  const handleItemsPerPageChange = (event: SelectChangeEvent<number>) => {
+    setItemsPerPage(event.target.value as number);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
 
   // Calculate threat intelligence metrics
   const metrics = {
@@ -299,6 +334,14 @@ const ThreatIntelligence: React.FC = () => {
                     variant="outlined"
                     color="primary"
                   />
+                  {totalPages > 1 && (
+                    <Chip 
+                      label={`Page ${currentPage} of ${totalPages}`}
+                      size="small" 
+                      variant="outlined"
+                      color="info"
+                    />
+                  )}
                 </Box>
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -367,6 +410,28 @@ const ThreatIntelligence: React.FC = () => {
                       />
                     </IconButton>
                   </Tooltip>
+                  
+                  {/* Items per page selector */}
+                  <FormControl size="small">
+                    <InputLabel id="items-per-page-label">Items/Page</InputLabel>
+                    <Select
+                      labelId="items-per-page-label"
+                      id="items-per-page-select"
+                      value={itemsPerPage}
+                      label="Items/Page"
+                      onChange={handleItemsPerPageChange}
+                      sx={{ 
+                        minWidth: 100,
+                        backgroundColor: 'background.paper'
+                      }}
+                    >
+                      <MenuItem value={5}>5</MenuItem>
+                      <MenuItem value={10}>10</MenuItem>
+                      <MenuItem value={25}>25</MenuItem>
+                      <MenuItem value={50}>50</MenuItem>
+                      <MenuItem value={100}>100</MenuItem>
+                    </Select>
+                  </FormControl>
                 </Box>
               </Box>
               
@@ -425,14 +490,12 @@ const ThreatIntelligence: React.FC = () => {
                   )}
                   
                   <List sx={{ 
-                    maxHeight: 600, 
-                    overflowY: 'auto',
                     opacity: threatIntelLoading ? 0.8 : 1,
                     transition: 'opacity 0.3s ease',
                     minHeight: 350,
                     padding: 0
-                  }}>
-                    {sortedThreatIntel.map((threat, index) => (
+                  }} id="threats-list">
+                    {paginatedThreatIntel.map((threat, index) => (
                     <div key={threat.id}>
                       <ListItem sx={{ px: 0, py: 2 }}>
                         <ListItemText
@@ -502,10 +565,30 @@ const ThreatIntelligence: React.FC = () => {
                           }
                         />
                       </ListItem>
-                      {index < sortedThreatIntel.length - 1 && <Divider />}
+                      {index < paginatedThreatIntel.length - 1 && <Divider />}
                     </div>
                   ))}
                   </List>
+                  
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
+                      <Stack spacing={2}>
+                        <Pagination
+                          count={totalPages}
+                          page={currentPage}
+                          onChange={handlePageChange}
+                          color="primary"
+                          size="large"
+                          showFirstButton
+                          showLastButton
+                        />
+                        <Typography variant="caption" color="text.secondary" align="center">
+                          Showing {Math.min((currentPage - 1) * itemsPerPage + 1, sortedThreatIntel.length)}-{Math.min(currentPage * itemsPerPage, sortedThreatIntel.length)} of {sortedThreatIntel.length} threats
+                        </Typography>
+                      </Stack>
+                    </Box>
+                  )}
                 </Box>
               ) : (
                 <Box sx={{ 

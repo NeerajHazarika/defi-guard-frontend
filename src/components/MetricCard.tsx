@@ -4,7 +4,7 @@ import { TrendingUp, TrendingDown, TrendingFlat } from '@mui/icons-material';
 
 interface MetricCardProps {
   title: string;
-  value: string | number;
+  value: string | number | React.ReactNode;
   subtitle?: string;
   trend?: 'up' | 'down' | 'flat';
   trendValue?: string;

@@ -11,7 +11,6 @@ import {
   Divider,
 } from '@mui/material';
 import {
-  Dashboard,
   Security,
   Gavel,
   Shield,
@@ -28,15 +27,9 @@ interface SidebarProps {
 
 const menuItems = [
   { 
-    text: 'Dashboard Overview', 
-    icon: <Dashboard />, 
-    path: '/',
-    description: 'Main dashboard with key metrics'
-  },
-  { 
     text: 'Threat Intelligence', 
     icon: <Security />, 
-    path: '/threat-intelligence',
+    path: '/',
     description: 'Live threat OSINT & security alerts'
   },
   { 
@@ -55,7 +48,7 @@ const menuItems = [
     text: 'Stablecoin Monitoring', 
     icon: <AccountBalance />, 
     path: '/stablecoin-monitoring',
-    description: 'Real-time stablecoin price tracking'
+    description: 'Real-time stablecoin monitoring & world map'
   },
   { 
     text: 'Scam Address Checker', 

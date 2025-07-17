@@ -110,3 +110,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Stablecoin Monitor (Port 8001)
 - SQLite databases for each service
 - Health monitoring and automatic restarts
+
+## [1.1.0] - 2025-07-17
+
+### Added
+- **AWS EC2 Deployment Support**: Complete AWS deployment configuration and automation
+  - Added `deploy-aws.sh` automated deployment script with public IP detection
+  - Created comprehensive AWS deployment guide (`AWS_DEPLOYMENT.md`)
+  - Added `EXTERNAL_HOST` environment variable for dynamic API URL configuration
+  - Implemented CORS configuration for backend services
+- **Pagination System**: Comprehensive pagination for Threat Intelligence page
+  - Configurable items per page (5, 10, 25, 50, 100)
+  - Smooth scrolling navigation between pages
+  - Page indicators and item count display
+  - Integration with existing sorting functionality
+- **New Components**: Enhanced UI components and mapping features
+  - `InteractiveWorldMap.tsx`: Interactive global threat visualization
+  - `WorldMap.tsx`: SVG-based world map component
+  - Enhanced Material-UI pagination with first/last buttons
+- **Stablecoin OSINT Integration**: Advanced stablecoin monitoring service
+  - `useStablecoinOsint.ts`: React hook for stablecoin OSINT data
+  - `stablecoinOsint.ts`: Service layer for advanced stablecoin analysis
+  - Enhanced error handling and loading states
+
+### Fixed
+- **Frontend-Backend Communication**: Resolved AWS EC2 deployment connectivity issues
+  - Fixed localhost URL hardcoding preventing external access
+  - Implemented build-time API URL configuration
+  - Added proper Docker networking for cloud deployment
+- **Docker Configuration**: Enhanced container reliability and deployment
+  - Added restart policies (`unless-stopped`) for all services
+  - Fixed health check endpoints with proper error handling
+  - Improved build process with debug output and validation
+
+### Changed
+- **Default Route**: Set Threat Intelligence as the default application route (removed Dashboard)
+  - Removed Dashboard page and menu navigation
+  - Updated routing configuration in `App.tsx`
+  - Simplified navigation structure in `Sidebar.tsx`
+- **Environment Configuration**: Enhanced deployment flexibility
+  - Updated `.env.example` with AWS deployment variables
+  - Added blockchain RPC URL configurations
+  - Included comprehensive API key documentation
+- **UI/UX Improvements**: Enhanced user experience across components
+  - Improved loading states with individual component loading
+  - Enhanced error boundaries and fallback states
+  - Better responsive design for different screen sizes
+
+### Removed
+- **Dashboard Page**: Removed redundant dashboard implementation
+  - Eliminated `Dashboard.tsx` and related dependencies
+  - Cleaned up routing and navigation references
+  - Streamlined application structure
+
+### Technical
+- **Docker Compose**: Major improvements for cloud deployment
+  - Dynamic API URL configuration using environment variables
+  - Enhanced service networking and communication
+  - Proper build arguments for frontend API configuration
+- **Build System**: Enhanced Vite build configuration
+  - Improved environment variable handling
+  - Better debug output during build process
+  - Optimized production build for AWS deployment
+
+### Security
+- **CORS Configuration**: Proper cross-origin resource sharing setup
+  - Added CORS headers to all backend services
+  - Configured allowed origins for frontend access
+  - Implemented preflight request handling
+
+### Documentation
+- **AWS Deployment**: Comprehensive deployment documentation
+  - Step-by-step AWS EC2 setup instructions
+  - Security group configuration guide
+  - Troubleshooting and maintenance procedures
+  - Production deployment best practices

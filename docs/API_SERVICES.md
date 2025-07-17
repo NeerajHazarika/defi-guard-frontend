@@ -461,137 +461,182 @@ interface StablecoinAlert {
 }
 ```
 
-## API Service Class Implementation
+## 🔍 Stablecoin OSINT Service
 
-### Core API Service Methods
+**Port:** 8080  
+**Technology:** Python 3.11, FastAPI, PostgreSQL, Redis  
+**Purpose:** Stablecoin regulatory intelligence and geographic monitoring
 
-```typescript
-class ApiService {
-  // Generic fetch method with error handling
-  private async fetchApi<T>(endpoint: string, baseUrl?: string): Promise<T>
-  
-  // Sanction Detector methods
-  async screenAddress(address: string, includeTransactionAnalysis?: boolean, maxHops?: number): Promise<AddressScreeningResult>
-  async screenTransaction(request: TransactionScreeningRequest): Promise<TransactionScreeningResult>
-  async bulkScreening(request: BulkScreeningRequest): Promise<BulkScreeningResponse>
-  async getSanctionDetectorHealth(): Promise<SanctionDetectorHealth>
-  
-  // Threat Intelligence methods
-  async getThreatIntelNews(limit?: number, forceFresh?: boolean): Promise<ThreatIntelResponse>
-  async getThreatIntelHealth(): Promise<{ status: string; last_updated: string }>
-  
-  // Stablecoin Monitor methods
-  async getStablecoinData(): Promise<StablecoinResponse>
-  async getStablecoinAlerts(): Promise<StablecoinAlert[]>
-  async getStablecoinHealth(): Promise<{ status: string; last_updated: string }>
-}
+### Key Features
+- Country-specific stablecoin acceptance tracking
+- Regulatory status monitoring by region
+- News aggregation and sentiment analysis
+- Geographic compliance mapping
+- Exchange acceptance data
+- Real-time regulatory updates
 
-export const apiService = new ApiService();
-```
+### API Endpoints
 
-## Error Handling Patterns
-
-### Standard Error Response
-```typescript
-interface ErrorResponse {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-    details?: any;
-  };
-  timestamp: string;
-  correlationId: string;
-}
-```
-
-### Frontend Error Handling
-```typescript
-try {
-  const result = await apiService.screenAddress(address);
-  // Handle success
-} catch (error) {
-  // Error is already logged by apiService
-  setError(String(error));
-}
-```
-
-## Request/Response Logging
-
-All API calls include comprehensive logging:
-
-```typescript
-// Request logging
-console.log(`[API] Screening address: ${url}`);
-
-// Response logging
-console.log(`[API] Address screening response:`, result);
-
-// Error logging
-console.error('[API] Error screening address:', error);
-```
-
-## Rate Limiting & Constraints
-
-### Bulk Screening Limits
-- **Addresses:** Maximum 100 per batch
-- **Transactions:** Maximum 50 per batch
-- **Processing:** Sequential processing to avoid rate limits
-
-### API Timeouts
-- Default timeout: 30 seconds per request
-- Bulk operations: Extended timeout for large batches
-- Health checks: 5 second timeout
-
-## Testing API Endpoints
-
-### Manual Testing Commands
+#### Countries API
 ```bash
-# Sanction Detector Health
-curl -s "http://localhost:3000/api/health" | jq .
+# Get all countries with regulatory information
+GET /api/v1/countries/
 
-# Address Screening
-curl -s -X POST "http://localhost:3000/api/screening/address" \
-  -H "Content-Type: application/json" \
-  -d '{"address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"}' | jq .
+# Get country by ISO code
+GET /api/v1/countries/code/{country_code}
 
-# Threat Intel
-curl -s "http://localhost:8000/api/v1/threat-intel?limit=5" | jq .
+# Get stablecoins accepted in a country
+GET /api/v1/countries/{country_id}/stablecoins
 
-# Stablecoin Monitor
-curl -s "http://localhost:8001/metrics/current" | jq .
+# Get countries by region
+GET /api/v1/countries/region/{region_name}
+
+# Get country statistics
+GET /api/v1/countries/stats/overview
 ```
 
-### Integration Testing
+#### Stablecoins API
+```bash
+# Get all stablecoins with acceptance data
+GET /api/v1/stablecoins/
+
+# Get stablecoin by symbol
+GET /api/v1/stablecoins/symbol/{symbol}
+
+# Get countries where stablecoin is accepted
+GET /api/v1/stablecoins/{stablecoin_id}/countries
+
+# Get stablecoin statistics
+GET /api/v1/stablecoins/stats/overview
+```
+
+#### News Intelligence API
+```bash
+# Get regulatory news articles
+GET /api/v1/news/articles
+
+# Get fresh news (triggers scraping)
+GET /api/v1/news/articles/fresh
+
+# Trigger background news refresh
+POST /api/v1/news/refresh
+
+# Get news by category
+GET /api/v1/news/articles?category={regulation|audit|security|compliance}
+```
+
+#### Search & Query API
+```bash
+# Basic search across all data
+GET /api/v1/search?query={search_term}
+
+# Advanced query with filters
+GET /api/v1/query?country_code={code}&stablecoin_symbol={symbol}&is_accepted={true|false}
+```
+
+### Data Models
+
+#### Country Model
 ```typescript
-// Example integration test
-describe('API Service Integration', () => {
-  it('should screen address successfully', async () => {
-    const result = await apiService.screenAddress('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
-    expect(result.address).toBe('1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa');
-    expect(result.riskLevel).toBeOneOf(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
-  });
-});
+interface Country {
+  id: number;
+  name: string;
+  code: string; // ISO country code
+  region: string;
+  crypto_friendly: boolean;
+  regulatory_status: 'friendly' | 'neutral' | 'hostile' | 'regulated' | 'unclear';
+  stablecoins_accepted: string[];
+  last_updated: string;
+}
 ```
 
-## Performance Optimization
+#### Stablecoin Model
+```typescript
+interface Stablecoin {
+  id: number;
+  name: string;
+  symbol: string;
+  blockchain: string;
+  issuer: string;
+  market_cap?: number;
+  is_active: boolean;
+}
+```
+
+#### News Article Model
+```typescript
+interface NewsArticle {
+  id: string;
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  published_date: string;
+  category: 'regulation' | 'audit' | 'security' | 'compliance' | 'market';
+  stablecoins_mentioned: string[];
+  countries_mentioned: string[];
+  sentiment: 'positive' | 'neutral' | 'negative';
+  impact_score: number; // 1-10
+}
+```
+
+#### Acceptance Data Model
+```typescript
+interface StablecoinAcceptance {
+  country: Country;
+  stablecoin: Stablecoin;
+  is_accepted: boolean;
+  acceptance_level: 'full' | 'partial' | 'restricted' | 'banned';
+  legal_status: string;
+  use_cases: string[];
+  confidence_score: number; // 0-1
+  source_url?: string;
+  last_updated: string;
+}
+```
+
+### Integration Examples
+
+#### Frontend Integration
+```typescript
+// Fetch country regulations for world map
+const countriesResponse = await fetch('http://localhost:8080/api/v1/countries/');
+const countries = await countriesResponse.json();
+
+// Get stablecoin news for specific category
+const newsResponse = await fetch('http://localhost:8080/api/v1/news/articles?category=regulation&limit=10');
+const news = await newsResponse.json();
+
+// Search for USDC acceptance data
+const searchResponse = await fetch('http://localhost:8080/api/v1/search?query=USDC&stablecoin_symbol=USDC');
+const results = await searchResponse.json();
+```
+
+#### Environment Configuration
+```bash
+# Stablecoin OSINT Service
+VITE_STABLECOIN_OSINT_API_URL=http://localhost:8080
+
+# Docker service name (for internal communication)
+STABLECOIN_OSINT_SERVICE_URL=http://stablecoin-osint:8080
+```
+
+### Service Health
+```bash
+# Health check endpoint
+GET /health
+
+# Service status
+GET /api/v1/status
+```
+
+### Rate Limits
+- **Default:** 100 requests per minute per IP
+- **Search endpoints:** 30 requests per minute per IP
+- **Fresh data endpoints:** 10 requests per minute per IP (triggers scraping)
 
 ### Caching Strategy
-- Client-side caching for static data
-- Response transformation caching
-- Health check result caching (5 minutes)
-
-### Parallel Requests
-```typescript
-// Multiple health checks in parallel
-const [threatHealth, stablecoinHealth, sanctionHealth] = await Promise.allSettled([
-  apiService.getThreatIntelHealth(),
-  apiService.getStablecoinHealth(),
-  apiService.getSanctionDetectorHealth()
-]);
-```
-
-### Error Recovery
-- Automatic retry for network errors
-- Fallback data for non-critical services
-- Graceful degradation when services are unavailable
+- **Cached data:** Served from database (fast)
+- **Fresh data:** Triggers real-time scraping (slower)
+- **Auto-refresh:** Background scraping every 6 hours
+- **Cache TTL:** Country data (24h), News data (1h)

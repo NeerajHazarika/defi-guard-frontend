@@ -2,7 +2,7 @@
 
 ## System Architecture
 
-DeFi Guard Frontend is a microservices-based security monitoring platform with six core services:
+DeFi Guard Frontend is a microservices-based security monitoring platform with seven core services:
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
@@ -18,15 +18,21 @@ DeFi Guard Frontend is a microservices-based security monitoring platform with s
          │              └─────────┬──────────┘             │
          │                        │                        │
          │              ┌─────────▼──────────┐   ┌─────────▼─────────┐
-         └──────────────►│  Threat Intel     │   │  Stablecoin       │
-                        │  Service          │   │  Monitor Service  │
-                        │  Port: 8000       │   │  Port: 8001       │
-                        └─────────┬─────────┘   └─────────┬─────────┘
-                                  │                       │
-                        ┌─────────▼─────────┐   ┌─────────▼─────────┐
-                        │   SQLite DB       │   │   SQLite DB       │
-                        │  (Threat Data)    │   │   (Metrics)       │
-                        └───────────────────┘   └───────────────────┘
+         │              │  Threat Intel     │   │  Stablecoin       │
+         │              │  Service          │   │  Monitor Service  │
+         │              │  Port: 8000       │   │  Port: 8001       │
+         │              └─────────┬─────────┘   └─────────┬─────────┘
+         │                        │                       │
+         │              ┌─────────▼─────────┐   ┌─────────▼─────────┐
+         └──────────────►│ Stablecoin OSINT │   │   SQLite DB       │
+                        │ Service           │   │   (Metrics)       │
+                        │ Port: 8080        │   └───────────────────┘
+                        └─────────┬─────────┘            
+                                  │                       
+                        ┌─────────▼─────────┐              
+                        │  PostgreSQL DB    │              
+                        │  (OSINT Data)     │              
+                        └───────────────────┘              
 ```
 
 ## Service Responsibilities
@@ -101,6 +107,19 @@ DeFi Guard Frontend is a microservices-based security monitoring platform with s
   - Historical trend analysis
   - Market volatility tracking
   - Multi-stablecoin support
+
+### 🔍 Stablecoin OSINT Service
+- **Port:** 8080
+- **Technology:** Python 3.11, FastAPI
+- **Database:** PostgreSQL + Redis
+- **Purpose:** Stablecoin regulatory intelligence and geographic monitoring
+- **Key Features:**
+  - Country-specific stablecoin acceptance tracking
+  - Regulatory status monitoring by region
+  - News aggregation and sentiment analysis
+  - Geographic compliance mapping
+  - Exchange acceptance data
+  - Real-time regulatory updates
 
 ## Database Architecture
 

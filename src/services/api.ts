@@ -1,6 +1,7 @@
 // Backend service URLs
 const THREAT_INTEL_API_URL = import.meta.env.VITE_THREAT_INTEL_API_URL || 'http://localhost:8000';
 const STABLECOIN_MONITOR_API_URL = import.meta.env.VITE_STABLECOIN_MONITOR_API_URL || 'http://localhost:8001';
+const STABLECOIN_OSINT_API_URL = import.meta.env.VITE_STABLECOIN_OSINT_API_URL || 'http://localhost:8080';
 const SANCTION_DETECTOR_API_URL = import.meta.env.VITE_SANCTION_DETECTOR_API_URL || 'http://localhost:3000';
 const SCAM_DETECTOR_API_URL = import.meta.env.VITE_SCAM_DETECTOR_API_URL || 'http://localhost:3001';
 const DEFI_RISK_ASSESSMENT_API_URL = import.meta.env.VITE_DEFI_RISK_ASSESSMENT_API_URL || 'http://localhost:3003';
@@ -374,6 +375,64 @@ export interface RiskAssessmentHealth {
   };
 }
 
+// Stablecoin OSINT API interfaces
+export interface CountryRegulation {
+  id: number;
+  name: string;
+  code: string;
+  region: string;
+  crypto_friendly: boolean;
+  regulatory_status: 'friendly' | 'neutral' | 'hostile' | 'regulated' | 'unclear';
+  stablecoins_accepted: string[];
+  last_updated: string;
+  notes?: string;
+}
+
+export interface StablecoinNews {
+  id: string;
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  published_date: string;
+  category: 'regulation' | 'audit' | 'security' | 'compliance' | 'market' | 'technology';
+  stablecoins_mentioned: string[];
+  countries_mentioned: string[];
+  sentiment: 'positive' | 'neutral' | 'negative';
+  impact_score: number;
+}
+
+export interface StablecoinAcceptance {
+  country: CountryRegulation;
+  stablecoin: {
+    id: number;
+    name: string;
+    symbol: string;
+    blockchain: string;
+    issuer: string;
+  };
+  is_accepted: boolean;
+  acceptance_level: 'full' | 'partial' | 'restricted' | 'banned';
+  legal_status: string;
+  use_cases: string[];
+  confidence_score: number;
+  last_updated: string;
+}
+
+export interface OSINTResponse<T> {
+  data: T;
+  success: boolean;
+  total?: number;
+  page?: number;
+  per_page?: number;
+  cache_metadata?: {
+    cached: boolean;
+    age_minutes: number;
+    expires_at: string;
+  };
+}
+
+// API Service class
 class ApiService {
   private async fetchApi<T>(endpoint: string, baseUrl?: string): Promise<T> {
     try {
@@ -474,20 +533,44 @@ class ApiService {
       }));
 
       // Transform alerts to our interface  
-      const transformedAlerts: StablecoinAlert[] = alerts.map(alert => ({
-        id: alert.id || Math.random().toString(),
-        coin_symbol: alert.symbol || 'Unknown',
-        alert_type: alert.type || 'volatility',
-        severity: alert.severity || 'medium',
-        message: alert.message || 'Stablecoin alert',
-        price_at_alert: alert.price || 0,
-        deviation: alert.deviation || 0,
-        timestamp: alert.timestamp || new Date().toISOString()
-      }));
+      const transformedAlerts: StablecoinAlert[] = alerts.map(alert => {
+        // Generate a stable ID based on multiple factors to ensure uniqueness
+        const symbol = alert.symbol || 'unknown';
+        const type = alert.type || 'volatility';
+        const severity = alert.severity || 'medium';
+        const deviation = Math.round((alert.deviation || 0) * 1000) / 1000; // Round to 3 decimal places
+        const price = Math.round((alert.price || 0) * 10000) / 10000; // Round to 4 decimal places
+        
+        // Create a content-based hash for deduplication
+        const contentHash = `${symbol}-${type}-${severity}-${deviation}-${price}`.toLowerCase();
+        const stableId = alert.id || contentHash;
+        
+        return {
+          id: stableId,
+          coin_symbol: alert.symbol || 'Unknown',
+          alert_type: alert.type || 'volatility',
+          severity: alert.severity || 'medium',
+          message: alert.message || 'Stablecoin alert',
+          price_at_alert: alert.price || 0,
+          deviation: alert.deviation || 0,
+          timestamp: alert.timestamp || new Date().toISOString()
+        };
+      });
+
+      // Remove duplicates based on content similarity
+      const uniqueAlerts = transformedAlerts.filter((alert, index, self) => {
+        return index === self.findIndex(a => 
+          a.coin_symbol === alert.coin_symbol &&
+          a.alert_type === alert.alert_type &&
+          a.severity === alert.severity &&
+          Math.abs(a.deviation - alert.deviation) < 0.01 && // Same deviation within 0.01%
+          Math.abs(a.price_at_alert - alert.price_at_alert) < 0.0001 // Same price within 0.0001
+        );
+      });
 
       return {
         stablecoins,
-        alerts: transformedAlerts,
+        alerts: uniqueAlerts,
         total_monitored: stablecoins.length,
         last_updated: new Date().toISOString()
       };
@@ -506,16 +589,43 @@ class ApiService {
   async getStablecoinAlerts(): Promise<StablecoinAlert[]> {
     try {
       const response = await this.fetchApi<any[]>('/alerts/active', STABLECOIN_MONITOR_API_URL);
-      return response.map(alert => ({
-        id: alert.id || Math.random().toString(),
-        coin_symbol: alert.symbol || 'Unknown',
-        alert_type: alert.type || 'volatility',
-        severity: alert.severity || 'medium',
-        message: alert.message || 'Stablecoin alert',
-        price_at_alert: alert.price || 0,
-        deviation: alert.deviation || 0,
-        timestamp: alert.timestamp || new Date().toISOString()
-      }));
+      
+      const transformedAlerts = response.map(alert => {
+        // Generate a stable ID based on multiple factors to ensure uniqueness
+        const symbol = alert.symbol || 'unknown';
+        const type = alert.type || 'volatility';
+        const severity = alert.severity || 'medium';
+        const deviation = Math.round((alert.deviation || 0) * 1000) / 1000; // Round to 3 decimal places
+        const price = Math.round((alert.price || 0) * 10000) / 10000; // Round to 4 decimal places
+        
+        // Create a content-based hash for deduplication
+        const contentHash = `${symbol}-${type}-${severity}-${deviation}-${price}`.toLowerCase();
+        const stableId = alert.id || contentHash;
+        
+        return {
+          id: stableId,
+          coin_symbol: alert.symbol || 'Unknown',
+          alert_type: alert.type || 'volatility',
+          severity: alert.severity || 'medium',
+          message: alert.message || 'Stablecoin alert',
+          price_at_alert: alert.price || 0,
+          deviation: alert.deviation || 0,
+          timestamp: alert.timestamp || new Date().toISOString()
+        };
+      });
+
+      // Remove duplicates based on content similarity
+      const uniqueAlerts = transformedAlerts.filter((alert, index, self) => {
+        return index === self.findIndex(a => 
+          a.coin_symbol === alert.coin_symbol &&
+          a.alert_type === alert.alert_type &&
+          a.severity === alert.severity &&
+          Math.abs(a.deviation - alert.deviation) < 0.01 && // Same deviation within 0.01%
+          Math.abs(a.price_at_alert - alert.price_at_alert) < 0.0001 // Same price within 0.0001
+        );
+      });
+
+      return uniqueAlerts;
     } catch (error) {
       console.error('[API] Error fetching stablecoin alerts:', error);
       return [];
@@ -540,12 +650,16 @@ class ApiService {
     }
   }
 
-  async getSanctionDetectorHealth(): Promise<SanctionDetectorHealth> {
+  async getSanctionDetectorHealth(): Promise<{ status: string; last_updated: string }> {
     try {
-      return await this.fetchApi<SanctionDetectorHealth>('/', SANCTION_DETECTOR_API_URL);
+      const response = await this.fetchApi<{ status: string; message?: string }>('/', SANCTION_DETECTOR_API_URL);
+      return { 
+        status: response.status || 'healthy', 
+        last_updated: new Date().toISOString() 
+      };
     } catch (error) {
       console.error('[API] Error fetching sanction detector health:', error);
-      return { status: 'unhealthy', timestamp: new Date().toISOString(), uptime: 0, version: '', environment: '', services: { dataDirectories: { sanctionsDir: false, riskAssessmentsDir: false, auditLogsDir: false, configDir: false } } };
+      return { status: 'error', last_updated: new Date().toISOString() };
     }
   }
 
@@ -1066,4 +1180,213 @@ export const defiRiskAssessmentApi = {
       };
     }
   }
+};
+
+// Stablecoin OSINT Service APIs
+export const stablecoinOSINTApi = {
+  // Countries API
+  getCountries: async (params?: {
+    region?: string;
+    crypto_friendly?: boolean;
+    regulatory_status?: string;
+    limit?: number;
+  }): Promise<OSINTResponse<CountryRegulation[]>> => {
+    try {
+      const searchParams = new URLSearchParams();
+      if (params?.region) searchParams.append('region', params.region);
+      if (params?.crypto_friendly !== undefined) searchParams.append('crypto_friendly', params.crypto_friendly.toString());
+      if (params?.regulatory_status) searchParams.append('regulatory_status', params.regulatory_status);
+      if (params?.limit) searchParams.append('limit', params.limit.toString());
+
+      const response = await fetch(`${STABLECOIN_OSINT_API_URL}/api/v1/countries/?${searchParams}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching countries:', error);
+      return {
+        data: [],
+        success: false,
+      };
+    }
+  },
+
+  getCountryByCode: async (countryCode: string): Promise<OSINTResponse<CountryRegulation>> => {
+    try {
+      const response = await fetch(`${STABLECOIN_OSINT_API_URL}/api/v1/countries/code/${countryCode}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching country by code:', error);
+      return {
+        data: {} as CountryRegulation,
+        success: false,
+      };
+    }
+  },
+
+  getCountryStablecoins: async (countryId: number, acceptedOnly: boolean = false): Promise<OSINTResponse<StablecoinAcceptance[]>> => {
+    try {
+      const searchParams = new URLSearchParams();
+      if (acceptedOnly) searchParams.append('accepted_only', 'true');
+
+      const response = await fetch(`${STABLECOIN_OSINT_API_URL}/api/v1/countries/${countryId}/stablecoins?${searchParams}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching country stablecoins:', error);
+      return {
+        data: [],
+        success: false,
+      };
+    }
+  },
+
+  // News API
+  getNews: async (params?: {
+    category?: string;
+    stablecoin_symbol?: string;
+    country?: string;
+    sentiment?: string;
+    limit?: number;
+    fresh?: boolean;
+  }): Promise<OSINTResponse<StablecoinNews[]>> => {
+    try {
+      const searchParams = new URLSearchParams();
+      if (params?.category) searchParams.append('category', params.category);
+      if (params?.stablecoin_symbol) searchParams.append('stablecoin_symbol', params.stablecoin_symbol);
+      if (params?.country) searchParams.append('country', params.country);
+      if (params?.sentiment) searchParams.append('sentiment', params.sentiment);
+      if (params?.limit) searchParams.append('limit', params.limit.toString());
+
+      const endpoint = params?.fresh ? '/api/v1/news/articles/fresh' : '/api/v1/news/articles';
+      const response = await fetch(`${STABLECOIN_OSINT_API_URL}${endpoint}?${searchParams}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching news:', error);
+      return {
+        data: [],
+        success: false,
+      };
+    }
+  },
+
+  refreshNews: async (): Promise<OSINTResponse<{ message: string }>> => {
+    try {
+      const response = await fetch(`${STABLECOIN_OSINT_API_URL}/api/v1/news/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error refreshing news:', error);
+      return {
+        data: { message: 'Failed to refresh news' },
+        success: false,
+      };
+    }
+  },
+
+  // Search API
+  search: async (query: string, params?: {
+    country_code?: string;
+    stablecoin_symbol?: string;
+    is_accepted?: boolean;
+    limit?: number;
+  }): Promise<OSINTResponse<StablecoinAcceptance[]>> => {
+    try {
+      const searchParams = new URLSearchParams();
+      searchParams.append('query', query);
+      if (params?.country_code) searchParams.append('country_code', params.country_code);
+      if (params?.stablecoin_symbol) searchParams.append('stablecoin_symbol', params.stablecoin_symbol);
+      if (params?.is_accepted !== undefined) searchParams.append('is_accepted', params.is_accepted.toString());
+      if (params?.limit) searchParams.append('limit', params.limit.toString());
+
+      const response = await fetch(`${STABLECOIN_OSINT_API_URL}/api/v1/search?${searchParams}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error searching OSINT data:', error);
+      return {
+        data: [],
+        success: false,
+      };
+    }
+  },
+
+  // Service health
+  getHealth: async (): Promise<{ status: string; timestamp: string }> => {
+    try {
+      const response = await fetch(`${STABLECOIN_OSINT_API_URL}/health`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error checking OSINT service health:', error);
+      return {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  },
 };

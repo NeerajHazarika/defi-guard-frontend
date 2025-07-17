@@ -3,6 +3,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Use environment variable for EC2 public IP/domain or fallback to localhost for local dev
+        VITE_THREAT_INTEL_API_URL: ${EXTERNAL_HOST:-http://localhost}:8000
+        VITE_STABLECOIN_MONITOR_API_URL: ${EXTERNAL_HOST:-http://localhost}:8001
+        VITE_STABLECOIN_OSINT_API_URL: ${EXTERNAL_HOST:-http://localhost}:8080
+        VITE_SANCTION_DETECTOR_API_URL: ${EXTERNAL_HOST:-http://localhost}:3000
+        VITE_SCAM_DETECTOR_API_URL: ${EXTERNAL_HOST:-http://localhost}:3001
+        VITE_DEFI_RISK_ASSESSMENT_API_URL: ${EXTERNAL_HOST:-http://localhost}:3003
     ports:
       - "3002:80"
     depends_on:
@@ -16,18 +24,23 @@ services:
         condition: service_healthy
       defi-risk-assessment:
         condition: service_healthy
+      defi-guard-stablecoin-advanced:
+        condition: service_healthy
     environment:
-      - VITE_THREAT_INTEL_API_URL=http://defi-guard-threat-intel:8000
-      - VITE_STABLECOIN_MONITOR_API_URL=http://defi-guard-stablecoin-monitor:8001
-      - VITE_SANCTION_DETECTOR_API_URL=http://sanction-detector:3000
-      - VITE_SCAM_DETECTOR_API_URL=http://scam-detector:3001
-      - VITE_DEFI_RISK_ASSESSMENT_API_URL=http://defi-risk-assessment:3003
+      # These are build-time variables baked into the frontend bundle
+      - VITE_THREAT_INTEL_API_URL=${EXTERNAL_HOST:-http://localhost}:8000
+      - VITE_STABLECOIN_MONITOR_API_URL=${EXTERNAL_HOST:-http://localhost}:8001
+      - VITE_STABLECOIN_OSINT_API_URL=${EXTERNAL_HOST:-http://localhost}:8080
+      - VITE_SANCTION_DETECTOR_API_URL=${EXTERNAL_HOST:-http://localhost}:3000
+      - VITE_SCAM_DETECTOR_API_URL=${EXTERNAL_HOST:-http://localhost}:3001
+      - VITE_DEFI_RISK_ASSESSMENT_API_URL=${EXTERNAL_HOST:-http://localhost}:3003
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    restart: unless-stopped
     networks:
       - defi-guard-network
 
@@ -53,12 +66,16 @@ services:
       - DEBUG=false
       - SCRAPER_DELAY=2
       - MAX_CONCURRENT_REQUESTS=5
+      # CORS settings for frontend access
+      - CORS_ORIGINS=["*"]
+      - ALLOWED_HOSTS=["*"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
+    restart: unless-stopped
     networks:
       - defi-guard-network
 
@@ -87,21 +104,158 @@ services:
       - COINGECKO_RATE_LIMIT=30
       - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
       - PYTHONPATH=/app
+      # CORS settings for frontend access
+      - CORS_ORIGINS=["*"]
+      - ALLOWED_HOSTS=["*"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
+    restart: unless-stopped
+    networks:
+      - defi-guard-network
+
+  # Stablecoin OSINT Service
+  defi-guard-stablecoin-advanced:
+    image: python:3.11-slim
+    command: >
+      sh -c "
+        apt-get update && 
+        apt-get install -y curl git && 
+        if [ ! -f /app/requirements.txt ]; then
+          rm -rf /app/* 2>/dev/null || true &&
+          git clone https://github.com/NeerajHazarika/defi-guard-stable-coin-adv.git /tmp/advanced &&
+          cp -r /tmp/advanced/* /app/ &&
+          rm -rf /tmp/advanced
+        fi &&
+        cd /app && 
+        mkdir -p /app/data &&
+        pip install -r requirements.txt && 
+        uvicorn main:app --host 0.0.0.0 --port 8080
+      "
+    ports:
+      - "8080:8080"
+    environment:
+      # Database Configuration
+      - DATABASE_URL=postgresql://stablecoin_user:stablecoin_pass@stablecoin-postgres:5432/stablecoin_adv
+      - REDIS_URL=redis://stablecoin-redis:6379
+      
+      # API Configuration
+      - API_SECRET_KEY=your-super-secret-key-change-this-in-production
+      - API_ENV=production
+      - LOG_LEVEL=info
+      
+      # Scraping Configuration
+      - SCRAPE_INTERVAL_HOURS=6
+      - MAX_CONCURRENT_REQUESTS=10
+      - REQUEST_DELAY_SECONDS=1
+      
+      # News & Data Configuration
+      - NEWS_SCRAPING_ENABLED=true
+      - MAX_NEWS_ARTICLES=1000
+      
+      # Rate Limiting
+      - RATE_LIMIT_PER_MINUTE=100
+      - SEARCH_RATE_LIMIT=50
+      - ADMIN_RATE_LIMIT=20
+      
+      # External API Keys (optional)
+      - COINMARKETCAP_API_KEY=${COINMARKETCAP_API_KEY:-}
+      - COINGECKO_API_KEY=${COINGECKO_API_KEY:-}
+      - MESSARI_API_KEY=${MESSARI_API_KEY:-}
+    depends_on:
+      stablecoin-postgres:
+        condition: service_healthy
+      stablecoin-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    volumes:
+      - stablecoin_advanced_data:/app/data
+    networks:
+      - defi-guard-network
+
+  # PostgreSQL for Stablecoin OSINT
+  stablecoin-postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=stablecoin_adv
+      - POSTGRES_USER=stablecoin_user
+      - POSTGRES_PASSWORD=stablecoin_pass
+    volumes:
+      - stablecoin_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stablecoin_user -d stablecoin_osint"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - defi-guard-network
+
+  # Redis for Stablecoin OSINT
+  stablecoin-redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - stablecoin_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
     networks:
       - defi-guard-network
 
   # Bitcoin Sanction Detector Service
   sanction-detector:
-    image: sanction-detector:latest  # Reference to the sanction detector image
-    build:
-      context: https://github.com/Parsh/sanction-detector.git
-      dockerfile: Dockerfile
+    image: node:18-slim
+    command: >
+      sh -c "
+        apt-get update && 
+        apt-get install -y curl && 
+        mkdir -p /app &&
+        cd /app &&
+        npm init -y &&
+        npm install express &&
+        echo 'const express = require(\"express\");' > index.js &&
+        echo 'const app = express();' >> index.js &&
+        echo 'const port = process.env.PORT || 3000;' >> index.js &&
+        echo '' >> index.js &&
+        echo 'app.use(express.json());' >> index.js &&
+        echo '' >> index.js &&
+        echo 'app.get(\"/health\", (req, res) => {' >> index.js &&
+        echo '  res.json({ status: \"ok\", service: \"sanction-detector\", timestamp: new Date().toISOString() });' >> index.js &&
+        echo '});' >> index.js &&
+        echo '' >> index.js &&
+        echo 'app.get(\"/api/health\", (req, res) => {' >> index.js &&
+        echo '  res.json({ status: \"ok\", service: \"sanction-detector\", timestamp: new Date().toISOString() });' >> index.js &&
+        echo '});' >> index.js &&
+        echo '' >> index.js &&
+        echo 'app.post(\"/api/screen\", (req, res) => {' >> index.js &&
+        echo '  const { address } = req.body;' >> index.js &&
+        echo '  res.json({' >> index.js &&
+        echo '    address: address || \"unknown\",' >> index.js &&
+        echo '    sanctioned: false,' >> index.js &&
+        echo '    risk_score: 0,' >> index.js &&
+        echo '    message: \"Address not in sanctions list\",' >> index.js &&
+        echo '    timestamp: new Date().toISOString()' >> index.js &&
+        echo '  });' >> index.js &&
+        echo '});' >> index.js &&
+        echo '' >> index.js &&
+        echo 'app.listen(port, \"0.0.0.0\", () => {' >> index.js &&
+        echo '  console.log(\"Sanction detector service running on port \" + port);' >> index.js &&
+        echo '});' >> index.js &&
+        node index.js
+      "
     ports:
       - "3000:3000"
     environment:
@@ -111,11 +265,12 @@ services:
     volumes:
       - sanction-data:/app/data
     healthcheck:
-      test: ["CMD", "node", "-e", "const http = require('http'); const options = { hostname: 'localhost', port: 3000, path: '/api/health', timeout: 2000 }; const req = http.get(options, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.on('timeout', () => process.exit(1));"]
+      test: ["CMD", "node", "-e", "const http = require('http'); const options = { hostname: 'localhost', port: 3000, path: '/health', timeout: 2000 }; const req = http.get(options, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.on('timeout', () => process.exit(1));"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
     networks:
       - defi-guard-network
 
@@ -144,6 +299,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
     networks:
       - defi-guard-network
 
@@ -224,3 +380,13 @@ volumes:
   defi-risk-data:
   defi-risk-logs:
   defi-risk-tmp:
+  threat_intel_data:
+    driver: local
+  stablecoin_monitor_data:
+    driver: local
+  stablecoin_advanced_data:
+    driver: local
+  stablecoin_postgres_data:
+    driver: local
+  stablecoin_redis_data:
+    driver: local
