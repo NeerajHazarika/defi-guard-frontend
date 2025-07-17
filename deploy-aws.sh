@@ -113,8 +113,21 @@ setup_environment() {
         fi
     fi
     
-    # Update EXTERNAL_HOST in .env file
-    sed -i.bak "s|EXTERNAL_HOST=http://localhost|EXTERNAL_HOST=http://$public_ip|g" .env
+    # Update EXTERNAL_HOST in .env file using a more reliable method
+    # Create a temporary file with the updated content
+    if grep -q "EXTERNAL_HOST=" .env; then
+        # Update existing EXTERNAL_HOST line
+        awk -v ip="$public_ip" '{
+            if ($0 ~ /^EXTERNAL_HOST=/) {
+                print "EXTERNAL_HOST=http://" ip
+            } else {
+                print $0
+            }
+        }' .env > .env.tmp && mv .env.tmp .env
+    else
+        # Add EXTERNAL_HOST if it doesn't exist
+        echo "EXTERNAL_HOST=http://$public_ip" >> .env
+    fi
     print_status "Updated EXTERNAL_HOST to http://$public_ip"
     
     print_warning "Please review and update the .env file with your API keys if needed:"
