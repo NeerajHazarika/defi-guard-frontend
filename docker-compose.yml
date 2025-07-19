@@ -8,9 +8,9 @@ services:
         VITE_THREAT_INTEL_API_URL: ${EXTERNAL_HOST:-http://localhost}:8000
         VITE_STABLECOIN_MONITOR_API_URL: ${EXTERNAL_HOST:-http://localhost}:8001
         VITE_STABLECOIN_OSINT_API_URL: ${EXTERNAL_HOST:-http://localhost}:8080
-        VITE_SANCTION_DETECTOR_API_URL: ${EXTERNAL_HOST:-http://localhost}:3000
+        VITE_SANCTION_DETECTOR_API_URL: ${EXTERNAL_HOST:-http://localhost}:3002/sanction-api
         VITE_SCAM_DETECTOR_API_URL: ${EXTERNAL_HOST:-http://localhost}:3001
-        VITE_DEFI_RISK_ASSESSMENT_API_URL: ${EXTERNAL_HOST:-http://localhost}:3003
+        VITE_DEFI_RISK_ASSESSMENT_API_URL: ${EXTERNAL_HOST:-http://localhost}:3002/defi-api
     ports:
       - "3002:80"
     depends_on:
@@ -29,9 +29,9 @@ services:
       - VITE_THREAT_INTEL_API_URL=${EXTERNAL_HOST:-http://localhost}:8000
       - VITE_STABLECOIN_MONITOR_API_URL=${EXTERNAL_HOST:-http://localhost}:8001
       - VITE_STABLECOIN_OSINT_API_URL=${EXTERNAL_HOST:-http://localhost}:8080
-      - VITE_SANCTION_DETECTOR_API_URL=${EXTERNAL_HOST:-http://localhost}:3000
+      - VITE_SANCTION_DETECTOR_API_URL=${EXTERNAL_HOST:-http://localhost}:3002/sanction-api
       - VITE_SCAM_DETECTOR_API_URL=${EXTERNAL_HOST:-http://localhost}:3001
-      - VITE_DEFI_RISK_ASSESSMENT_API_URL=${EXTERNAL_HOST:-http://localhost}:3003
+      - VITE_DEFI_RISK_ASSESSMENT_API_URL=${EXTERNAL_HOST:-http://localhost}:3002/defi-api
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/"]
       interval: 30s
@@ -213,61 +213,42 @@ services:
     networks:
       - defi-guard-network
 
-  # Bitcoin Sanction Detector Service
+  # Bitcoin Sanction Detector Service (Real Implementation)
   sanction-detector:
-    image: node:18-slim
+    image: node:20-alpine
+    working_dir: /app
     command: >
       sh -c "
-        apt-get update && 
-        apt-get install -y curl && 
-        mkdir -p /app &&
-        cd /app &&
-        npm init -y &&
-        npm install express &&
-        echo 'const express = require(\"express\");' > index.js &&
-        echo 'const app = express();' >> index.js &&
-        echo 'const port = process.env.PORT || 3000;' >> index.js &&
-        echo '' >> index.js &&
-        echo 'app.use(express.json());' >> index.js &&
-        echo '' >> index.js &&
-        echo 'app.get(\"/health\", (req, res) => {' >> index.js &&
-        echo '  res.json({ status: \"ok\", service: \"sanction-detector\", timestamp: new Date().toISOString() });' >> index.js &&
-        echo '});' >> index.js &&
-        echo '' >> index.js &&
-        echo 'app.get(\"/api/health\", (req, res) => {' >> index.js &&
-        echo '  res.json({ status: \"ok\", service: \"sanction-detector\", timestamp: new Date().toISOString() });' >> index.js &&
-        echo '});' >> index.js &&
-        echo '' >> index.js &&
-        echo 'app.post(\"/api/screen\", (req, res) => {' >> index.js &&
-        echo '  const { address } = req.body;' >> index.js &&
-        echo '  res.json({' >> index.js &&
-        echo '    address: address || \"unknown\",' >> index.js &&
-        echo '    sanctioned: false,' >> index.js &&
-        echo '    risk_score: 0,' >> index.js &&
-        echo '    message: \"Address not in sanctions list\",' >> index.js &&
-        echo '    timestamp: new Date().toISOString()' >> index.js &&
-        echo '  });' >> index.js &&
-        echo '});' >> index.js &&
-        echo '' >> index.js &&
-        echo 'app.listen(port, \"0.0.0.0\", () => {' >> index.js &&
-        echo '  console.log(\"Sanction detector service running on port \" + port);' >> index.js &&
-        echo '});' >> index.js &&
-        node index.js
+        apk add --no-cache curl git && 
+        git clone https://github.com/Parsh/sanction-detector.git /tmp/sanction-repo &&
+        cp -r /tmp/sanction-repo/* /app/ &&
+        rm -rf /tmp/sanction-repo &&
+        mkdir -p /app/data/sanctions/refined_data &&
+        npm install --production=false && 
+        npx tsc && 
+        curl -L https://raw.githubusercontent.com/Parsh/sanction-detector/main/data/sanctions/refined_data/ofac-crypto-addresses.json -o /app/data/sanctions/refined_data/ofac-crypto-addresses.json || echo 'Warning: Could not download OFAC data, service will initialize with empty dataset' &&
+        npm start
       "
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3000
       - LOG_LEVEL=info
+      - DATA_DIR=/app/data
+      - SANCTIONS_DIR=/app/data/sanctions
+      - RISK_ASSESSMENTS_DIR=/app/data/risk-assessments
+      - AUDIT_LOGS_DIR=/app/data/audit-logs
+      - CONFIG_DIR=/app/data/config
+      - ALLOWED_ORIGINS=*
     volumes:
-      - sanction-data:/app/data
+      - /app/data
     healthcheck:
-      test: ["CMD", "node", "-e", "const http = require('http'); const options = { hostname: 'localhost', port: 3000, path: '/health', timeout: 2000 }; const req = http.get(options, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.on('timeout', () => process.exit(1));"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
     restart: unless-stopped
     networks:
       - defi-guard-network
@@ -365,18 +346,6 @@ services:
       retries: 5
       start_period: 120s
     restart: unless-stopped
-    networks:
-      - defi-guard-network
-
-  # CORS Proxy for DeFi Risk Assessment
-  defi-risk-assessment-proxy:
-    image: nginx:alpine
-    ports:
-      - "3003:80"
-    volumes:
-      - ./nginx-server.conf:/etc/nginx/conf.d/default.conf
-    depends_on:
-      - defi-risk-assessment
     networks:
       - defi-guard-network
 

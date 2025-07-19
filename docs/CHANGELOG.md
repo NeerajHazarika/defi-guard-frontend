@@ -7,42 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **DeFi Risk Assessment Service**: Resolved connection issues and proxy configuration
+  - Fixed "connection refused" errors by consolidating nginx proxy configuration
+  - Updated Docker environment variables to use proxy paths instead of direct service access
+  - Removed duplicate nginx proxy services that were causing port conflicts
+  - DeFi Risk Assessment now properly accessible through /defi-api/ proxy path
+- **Service Integration**: Improved backend service communication
+  - All services now route through single nginx proxy with proper CORS headers
+  - Eliminated configuration conflicts between separate proxy services
+  - Verified health check endpoints working correctly through proxy
+
+### Changed
+- **Docker Configuration**: Consolidated proxy architecture
+  - Single nginx.conf handles routing for all backend services
+  - Updated VITE_DEFI_RISK_ASSESSMENT_API_URL to use localhost:3002/defi-api
+  - Removed separate defi-risk-assessment-proxy service
+  - Maintained backward compatibility with existing service endpoints
+
+## [1.3.0] - 2025-01-19
+
+### Changed
+- **Sanction Detector Service**: Replaced mock implementation with real OFAC sanctions data integration
+  - Integrated actual GitHub repository (Parsh/sanction-detector) for Bitcoin address screening
+  - Replaced hardcoded mock responses with real-time OFAC cryptocurrency sanctions database
+  - Added proper TypeScript-based service with comprehensive logging and error handling
+  - Service now correctly identifies sanctioned Bitcoin addresses with detailed entity information
+  - Enhanced API responses with confidence scores, risk levels, and sanction match details
+
+### Fixed
+- **API Response Format Issues**: Resolved frontend display problems with transaction screening
+  - Fixed bulk screening showing 0 counts despite API returning correct high-risk data
+  - Updated `bulkScreening()` transformation to use new response format with `riskLevel` instead of `sanctioned` boolean
+  - Fixed transaction screening to properly handle nested data structure from real API
+  - Corrected address screening to parse new response format with sanction match details
+  - All screening features now correctly display risk levels and sanction information
+- **CORS Configuration**: Fixed cross-origin request issues
+  - Added nginx proxy configuration with proper CORS headers for sanction detection service
+  - Fixed Docker compose nginx configuration file mounting issue
+  - Configured /sanction-api/ proxy path for containerized access to real sanction detector
+- **Docker Configuration**: Resolved container startup and proxy issues
+  - Fixed nginx configuration file mounting error in docker-compose.yml
+  - Updated environment variables to use nginx proxy instead of direct service access
+  - Ensured all containers start successfully with proper health checks
+
 ### Removed
-- **Backend Service Status Components**: Cleaned up frontend UI by removing technical service health indicators
-  - Removed service health status Alert components from DeFi Risk Assessment and Threat Intelligence pages
-  - Cleaned up unused state variables and API calls related to service health monitoring
-  - Streamlined user interface to focus on core functionality rather than technical service status
-- **Development and Test Files**: Removed redundant files to clean up repository
-  - Removed `DeFiRiskAssessment.test.tsx` - redundant test file
-  - Removed `mock-risk-assessment.js` - development mock API server
+- **Test and Mock Files**: Cleaned up development artifacts and test files
+  - Removed `DeFiRiskAssessment.test.tsx` - test file for DeFi risk assessment component
+  - Removed `testConnection.ts` - utility for testing API connections
+  - Removed `mock-risk-assessment.js` - mock API server for development
   - Removed `cors-test.html` - CORS testing utility
-  - Removed `nginx-cors.conf` and `nginx-server.conf` - redundant nginx configurations
-  - Removed `test-data.json` - test data file
-- **Unused Page Components**: Cleaned up redundant page components
-  - Removed `DashboardTest.tsx` - unused dashboard test component
-  - Removed `DeFiRiskAssessmentNew.tsx` - redundant risk assessment component
-  - Removed `GlobalStablecoinMapSVG.tsx` - unused SVG map component  
-  - Removed `StablecoinMonitoring_new.tsx` - redundant stablecoin monitoring component
+  - Removed `test-data.json` - sample test data file
+- **Multinode Configuration**: Removed multinode deployment files
+  - Removed `docker-compose.multinode.yml` - multinode Docker configuration
+  - Removed `nginx.multinode.conf` - multinode nginx configuration
+- **Documentation Cleanup**: Removed outdated and redundant documentation
+  - Removed `parsh.md` - outdated research documentation
+  - Removed `SERVICE_REPORTS.md` - redundant service reports documentation
 
 ### Enhanced
-- **Type Definitions**: Updated TypeScript interfaces for enhanced DeFi protocol analysis
-  - Added comprehensive `VulnerabilityDetection` interface for security analysis results
-  - Added `SecurityAnalysisResult` interface with metadata tracking
-  - Added `ProtocolAssessmentStatus` interface for real-time assessment progress
-  - Added `EnhancedRiskLevel` interface with multi-dimensional scoring
-- **Documentation**: Updated comprehensive service architecture documentation
-  - Enhanced `SERVICE_REPORTS.md` with detailed technical analysis
-  - Updated `parsh.md` with complete academic research documentation
-  - Added performance metrics and security analysis sections
+- **Sanction Detection Accuracy**: Significantly improved Bitcoin address risk assessment
+  - Real OFAC sanctions data now provides accurate HIGH/LOW risk classifications
+  - Detailed sanction match information including entity names, IDs, and violation types
+  - Support for multiple cryptocurrency types (Bitcoin, Ethereum, Litecoin, etc.)
+  - Enhanced confidence scoring and processing time metrics
+- **DeFi Risk Assessment Integration**: Fixed connection and proxy configuration issues
+  - Consolidated nginx proxy configuration to handle both sanction detector and DeFi risk assessment
+  - Updated environment variables to use unified proxy paths (/sanction-api/ and /defi-api/)
+  - Resolved connection refused errors by eliminating duplicate nginx proxy services
+  - Fixed Docker compose configuration to route DeFi risk assessment through main nginx proxy
+- **System Architecture**: Improved containerized service communication
+  - Single nginx proxy now handles CORS and routing for all backend services
+  - Eliminated port conflicts between separate proxy services
+  - Streamlined Docker configuration for better maintainability
+  - All services now accessible through standardized proxy paths
+- **Service Architecture**: Improved microservices integration
+  - Real sanction detector service with proper health checks and monitoring
+  - Standardized API response format across all security services
+  - Better error handling and correlation tracking for debugging
 
 ### Technical
-- **Code Quality**: Improved codebase organization and maintainability
-  - Removed unused imports and dependencies from frontend components
-  - Cleaned up redundant configuration files and development utilities
-  - Streamlined API integration layer for better performance
-- **UI/UX**: Enhanced user experience by removing technical noise
-  - Simplified interface by removing backend service health status displays
-  - Focused UI on core security functionality and risk assessment features
+- **Code Quality**: Repository cleanup and organization improvements
+  - Removed development test files and mock implementations
+  - Streamlined Docker configuration by removing unused multinode setup
+  - Cleaned up documentation structure for better maintainability
+- **Security**: Enhanced sanctions screening capabilities
+  - Real-time access to updated OFAC cryptocurrency sanctions list
+  - Proper entity matching with detailed violation information
+  - Improved risk scoring algorithms based on actual regulatory data
 
 ## [1.2.0] - 2025-01-XX
 

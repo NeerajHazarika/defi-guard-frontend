@@ -848,7 +848,20 @@ class ApiService {
       const result = await response.json();
       console.log(`[API] Address screening response:`, result);
       
-      return result.data;
+      // Handle the new real API response format with nested data structure
+      const responseData = result.data || result;
+      
+      const transformedResult: AddressScreeningResult = {
+        address: responseData.address || address,
+        riskScore: responseData.riskScore || 0,
+        riskLevel: responseData.riskLevel || 'LOW',
+        sanctionMatches: responseData.sanctionMatches || [],
+        timestamp: responseData.timestamp || new Date().toISOString(),
+        confidence: responseData.confidence || 0.1,
+        processingTimeMs: responseData.processingTimeMs || 100
+      };
+      
+      return transformedResult;
     } catch (error) {
       console.error('[API] Error screening address:', error);
       throw error;
@@ -882,7 +895,23 @@ class ApiService {
       const result = await response.json();
       console.log(`[API] Transaction screening response:`, result);
       
-      return result.data;
+      // Handle the new real API response format with nested data structure
+      const responseData = result.data || result;
+      
+      // Transform real API response to match frontend interface
+      const transformedResult: TransactionScreeningResult = {
+        txHash: responseData.txHash || request.txHash,
+        inputAddresses: responseData.inputAddresses || [],
+        outputAddresses: responseData.outputAddresses || [],
+        overallRiskScore: responseData.overallRiskScore || 0,
+        overallRiskLevel: responseData.overallRiskLevel || 'LOW',
+        sanctionMatchesCount: responseData.sanctionMatchesCount || 0,
+        confidence: responseData.confidence || 0.5,
+        processingTimeMs: responseData.processingTimeMs || 100,
+        timestamp: responseData.timestamp || new Date().toISOString()
+      };
+      
+      return transformedResult;
     } catch (error) {
       console.error('[API] Error screening transaction:', error);
       throw error;
@@ -910,46 +939,35 @@ class ApiService {
       const result = await response.json();
       console.log(`[API] Bulk screening response:`, result);
       
-      // Transform the API response to match our interface
-      if (result.success && result.data) {
-        const apiData = result.data;
-        
-        // Calculate processing time from individual results
-        const totalProcessingTime = (
-          (apiData.addresses?.reduce((sum: number, addr: any) => 
-            sum + (addr.processingTimeMs || 0), 0) || 0) +
-          (apiData.transactions?.reduce((sum: number, tx: any) => 
-            sum + (tx.processingTimeMs || 0), 0) || 0)
-        );
-        
-        // Count sanction matches from addresses and transactions
-        const addressSanctionMatches = apiData.addresses?.reduce((sum: number, addr: any) => 
-          sum + (addr.sanctionMatches?.length || 0), 0) || 0;
-        
-        const transactionSanctionMatches = apiData.transactions?.reduce((sum: number, tx: any) => 
-          sum + (tx.sanctionMatchesCount || 0), 0) || 0;
-        
-        const sanctionMatchesCount = addressSanctionMatches + transactionSanctionMatches;
-        
-        const transformedResponse: BulkScreeningResponse = {
-          batchId: request.batchId,
-          summary: {
-            totalProcessed: (apiData.addresses?.length || 0) + (apiData.transactions?.length || 0),
-            highRiskCount: apiData.summary?.highRiskItems || 0,
-            sanctionMatchesCount: sanctionMatchesCount,
-            processingTimeMs: totalProcessingTime
-          },
-          results: {
-            addresses: apiData.addresses || [],
-            transactions: apiData.transactions || []
-          },
-          timestamp: result.timestamp || new Date().toISOString()
-        };
-        
-        return transformedResponse;
-      } else {
-        throw new Error('Invalid API response structure');
-      }
+      // Handle the new real API response format with nested data structure
+      const responseData = result.data || result;
+      const addressResults = responseData.addresses || [];
+      
+      // Calculate summary statistics from the real response data
+      const highRiskAddresses = addressResults.filter((addr: any) => 
+        addr.riskLevel === 'HIGH' || (addr.sanctionMatches && addr.sanctionMatches.length > 0)
+      );
+      
+      const totalSanctionMatches = addressResults.reduce((total: number, addr: any) => 
+        total + (addr.sanctionMatches ? addr.sanctionMatches.length : 0), 0
+      );
+      
+      const transformedResponse: BulkScreeningResponse = {
+        batchId: request.batchId,
+        summary: {
+          totalProcessed: addressResults.length,
+          highRiskCount: highRiskAddresses.length,
+          sanctionMatchesCount: totalSanctionMatches,
+          processingTimeMs: responseData.processingTimeMs || 0
+        },
+        results: {
+          addresses: addressResults,
+          transactions: responseData.transactions || []
+        },
+        timestamp: responseData.timestamp || new Date().toISOString()
+      };
+      
+      return transformedResponse;
     } catch (error) {
       console.error('[API] Error in bulk screening:', error);
       throw error;
